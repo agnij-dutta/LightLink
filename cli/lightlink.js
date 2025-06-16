@@ -37,7 +37,7 @@ const NETWORKS = {
     chainId: 43113,
     blockExplorer: 'https://testnet.snowtrace.io',
     linkToken: '0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846',
-    vrfCoordinator: '0x2eD832Ba664535e5886b75D64C46EB9a228C2610',
+    vrfCoordinator: '0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE',
     functionsRouter: '0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0',
     ccipRouter: '0xF694E193200268f9a4868e4Aa017A0118C9a8177'
   },
