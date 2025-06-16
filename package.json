@@ -7,15 +7,25 @@
     "test": "hardhat test",
     "compile": "hardhat compile",
     "deploy": "hardhat ignition deploy ./ignition/modules/ZKOracle.js",
+    "deploy:fuji": "hardhat run scripts/deploy.js --network fuji",
     "node": "hardhat node",
-    "build-circuits": "npm run build:multiplier && npm run build:merkle",
-    "build:multiplier": "circom circuits/multiplier.circom --r1cs --wasm --sym -o artifacts/circuits/",
+    "build-circuits": "npm run build:proof-aggregator && npm run build:merkle && npm run build:multiplier",
+    "build:proof-aggregator": "circom circuits/proof_aggregator.circom --r1cs --wasm --sym -o artifacts/circuits/",
     "build:merkle": "circom circuits/merkle_proof.circom --r1cs --wasm --sym -o artifacts/circuits/",
+    "build:multiplier": "circom circuits/multiplier.circom --r1cs --wasm --sym -o artifacts/circuits/",
     "generate-witness": "node scripts/generate-witness.js",
     "setup-ceremony": "node scripts/setup-ceremony.js",
     "generate-proof": "node scripts/generate-proof.js",
+    "setup-groth16": "node scripts/circuit-tools.js setup-groth16",
+    "generate-verifier": "node scripts/circuit-tools.js generate-verifier",
+    "test-proof": "node scripts/circuit-tools.js test-proof",
     "dev": "hardhat node & npm run deploy",
-    "clean": "hardhat clean && rm -rf artifacts/circuits"
+    "clean": "hardhat clean && rm -rf artifacts/circuits",
+    "cli": "node cli/lightlink.js",
+    "deploy-testnet": "node scripts/deploy-testnet.js",
+    "quick-deploy": "node scripts/quick-deploy.js",
+    "test-deployment": "node scripts/test-deployment.js",
+    "verify-contracts": "node scripts/verify-contracts.js"
   },
   "keywords": [
     "chainlink",
@@ -24,7 +34,9 @@
     "cross-chain",
     "proof-aggregation",
     "chromion",
-    "hackathon"
+    "hackathon",
+    "groth16",
+    "nova"
   ],
   "author": "LightLink Team",
   "license": "MIT",
@@ -50,8 +62,15 @@
   },
   "dependencies": {
     "@chainlink/contracts": "^1.4.0",
+    "@chainlink/contracts-ccip": "^1.6.0",
+    "@openzeppelin/contracts": "^5.3.0",
+    "axios": "^1.6.0",
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
     "dotenv": "^16.3.1",
-    "ffjavascript": "^0.2.63"
+    "ffjavascript": "^0.2.63",
+    "inquirer": "^9.2.12",
+    "ora": "^7.0.1"
   },
   "engines": {
     "node": ">=18.0.0"

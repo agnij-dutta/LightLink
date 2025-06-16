@@ -1,416 +1,360 @@
-const path = require("path");
-const fs = require("fs");
-const { execSync } = require("child_process");
-const snarkjs = require("snarkjs");
+#!/usr/bin/env node
 
-// Circuit configuration
-const CIRCUIT_CONFIG = {
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+const util = require('util');
+const snarkjs = require('snarkjs');
+
+const execAsync = util.promisify(exec);
+
+// Configuration
+const CIRCUITS_DIR = path.join(__dirname, '../circuits');
+const ARTIFACTS_DIR = path.join(__dirname, '../artifacts/circuits');
+const CONTRACTS_DIR = path.join(__dirname, '../contracts');
+const PTAU_FILE = path.join(ARTIFACTS_DIR, 'powersOfTau28_hez_final_15.ptau');
+
+// Circuit configurations
+const CIRCUITS = {
+  proof_aggregator: {
+    name: 'proof_aggregator',
+    file: 'proof_aggregator.circom',
+    template: 'ProofAggregator',
+    params: [4, 8, 32], // nProofs, merkleDepth, blockDepth
+    ptauPower: 15
+  },
+  merkle_proof: {
+    name: 'merkle_proof', 
+    file: 'merkle_proof.circom',
+    template: 'MerkleTreeInclusionProof',
+    params: [8], // depth
+    ptauPower: 12
+  },
   multiplier: {
-    name: "multiplier",
-    inputPath: "circuits/multiplier.circom",
-    outputDir: "circuits/build/multiplier",
-    ptauFile: "circuits/ptau/powersOfTau28_hez_final_10.ptau"
-  },
-  merkleProof: {
-    name: "merkle_proof",
-    inputPath: "circuits/merkle_proof.circom",
-    outputDir: "circuits/build/merkle_proof",
-    ptauFile: "circuits/ptau/powersOfTau28_hez_final_12.ptau"
-  },
-  proofAggregator: {
-    name: "proof_aggregator",
-    inputPath: "circuits/proof_aggregator.circom",
-    outputDir: "circuits/build/proof_aggregator",
-    ptauFile: "circuits/ptau/powersOfTau28_hez_final_16.ptau"
+    name: 'multiplier',
+    file: 'multiplier.circom', 
+    template: 'Multiplier',
+    params: [],
+    ptauPower: 10
   }
 };
 
 // Ensure directories exist
-function ensureDirectoryExists(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
+function ensureDirectories() {
+  [ARTIFACTS_DIR, path.join(ARTIFACTS_DIR, 'ptau')].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  });
 }
 
-// Download powers of tau files if they don't exist
-async function downloadPtauFiles() {
-  console.log("📥 Checking for Powers of Tau files...");
+// Download Powers of Tau file if not exists
+async function downloadPtau(power = 15) {
+  const ptauPath = path.join(ARTIFACTS_DIR, 'ptau', `powersOfTau28_hez_final_${power}.ptau`);
   
-  const ptauDir = "circuits/ptau";
-  ensureDirectoryExists(ptauDir);
-  
-  const ptauFiles = [
-    {
-      name: "powersOfTau28_hez_final_10.ptau",
-      url: "https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_10.ptau"
-    },
-    {
-      name: "powersOfTau28_hez_final_12.ptau",
-      url: "https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_12.ptau"
-    },
-    {
-      name: "powersOfTau28_hez_final_16.ptau",
-      url: "https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_16.ptau"
-    }
-  ];
-  
-  for (const ptauFile of ptauFiles) {
-    const filePath = path.join(ptauDir, ptauFile.name);
-    if (!fs.existsSync(filePath)) {
-      console.log(`📥 Downloading ${ptauFile.name}...`);
-      try {
-        execSync(`curl -o ${filePath} ${ptauFile.url}`, { stdio: 'inherit' });
-        console.log(`✅ Downloaded ${ptauFile.name}`);
-      } catch (error) {
-        console.error(`❌ Failed to download ${ptauFile.name}:`, error.message);
-        console.log(`⚠️  Creating dummy file for development...`);
-        // Create dummy file for development
-        fs.writeFileSync(filePath, Buffer.alloc(1024, 0));
-      }
-    } else {
-      console.log(`✅ ${ptauFile.name} already exists`);
-    }
+  if (fs.existsSync(ptauPath)) {
+    console.log(`✅ Powers of Tau file already exists: ${ptauPath}`);
+    return ptauPath;
   }
-}
 
-// Compile a circuit
-async function compileCircuit(circuitName) {
-  const config = CIRCUIT_CONFIG[circuitName];
-  if (!config) {
-    throw new Error(`Unknown circuit: ${circuitName}`);
-  }
-  
-  console.log(`🔧 Compiling circuit: ${circuitName}`);
-  
-  // Ensure output directory exists
-  ensureDirectoryExists(config.outputDir);
-  
-  const inputPath = config.inputPath;
-  const outputPath = path.join(config.outputDir, `${config.name}.r1cs`);
-  const wasmPath = path.join(config.outputDir, `${config.name}.wasm`);
-  const symPath = path.join(config.outputDir, `${config.name}.sym`);
+  console.log(`📥 Downloading Powers of Tau file (2^${power})...`);
   
   try {
-    // Compile circuit with circom
-    const circomCmd = `circom ${inputPath} --r1cs --wasm --sym -o ${config.outputDir}`;
-    console.log(`Running: ${circomCmd}`);
-    execSync(circomCmd, { stdio: 'inherit' });
-    
-    console.log(`✅ Circuit ${circuitName} compiled successfully`);
-    
-    return {
-      r1csPath: outputPath,
-      wasmPath: path.join(config.outputDir, `${config.name}_js`, `${config.name}.wasm`),
-      symPath: symPath
-    };
+    const url = `https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_${power}.ptau`;
+    await execAsync(`wget -O ${ptauPath} ${url}`);
+    console.log(`✅ Downloaded: ${ptauPath}`);
+    return ptauPath;
   } catch (error) {
-    console.error(`❌ Failed to compile circuit ${circuitName}:`, error.message);
+    console.error(`❌ Failed to download ptau file: ${error.message}`);
     throw error;
   }
 }
 
-// Generate trusted setup for a circuit
-async function generateTrustedSetup(circuitName) {
-  const config = CIRCUIT_CONFIG[circuitName];
+// Compile circuit
+async function compileCircuit(circuitName) {
+  const config = CIRCUITS[circuitName];
   if (!config) {
-    throw new Error(`Unknown circuit: ${circuitName}`);
+    throw new Error(`Circuit ${circuitName} not found in configuration`);
   }
+
+  const circuitPath = path.join(CIRCUITS_DIR, config.file);
+  const outputDir = path.join(ARTIFACTS_DIR, config.name);
+
+  if (!fs.existsSync(circuitPath)) {
+    throw new Error(`Circuit file not found: ${circuitPath}`);
+  }
+
+  // Ensure output directory exists
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  console.log(`🔨 Compiling circuit: ${circuitName}`);
   
-  console.log(`🔐 Generating trusted setup for: ${circuitName}`);
-  
-  const r1csPath = path.join(config.outputDir, `${config.name}.r1cs`);
-  const zkeyPath = path.join(config.outputDir, `${config.name}.zkey`);
-  const vkeyPath = path.join(config.outputDir, `${config.name}_vkey.json`);
+  const cmd = `circom ${circuitPath} --r1cs --wasm --sym -o ${outputDir}`;
   
   try {
-    // Phase 1: Setup
-    console.log("Phase 1: Powers of Tau setup");
-    await snarkjs.zKey.newZKey(r1csPath, config.ptauFile, zkeyPath);
-    
-    // Phase 2: Circuit-specific setup (simplified for demo)
-    console.log("Phase 2: Circuit-specific setup");
-    const finalZkeyPath = path.join(config.outputDir, `${config.name}_final.zkey`);
-    await snarkjs.zKey.beacon(zkeyPath, finalZkeyPath, "beacon", "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
-    
-    // Export verification key
-    console.log("Exporting verification key");
-    const vKey = await snarkjs.zKey.exportVerificationKey(finalZkeyPath);
-    fs.writeFileSync(vkeyPath, JSON.stringify(vKey, null, 2));
-    
-    console.log(`✅ Trusted setup generated for ${circuitName}`);
+    const { stdout, stderr } = await execAsync(cmd);
+    console.log(`✅ Circuit compiled successfully`);
+    if (stdout) console.log(stdout);
+    if (stderr) console.warn(stderr);
     
     return {
-      zkeyPath: finalZkeyPath,
-      vkeyPath: vkeyPath
+      r1cs: path.join(outputDir, `${config.name}.r1cs`),
+      wasm: path.join(outputDir, `${config.name}_js`, `${config.name}.wasm`),
+      sym: path.join(outputDir, `${config.name}.sym`)
     };
   } catch (error) {
-    console.error(`❌ Failed to generate trusted setup for ${circuitName}:`, error.message);
+    console.error(`❌ Circuit compilation failed: ${error.message}`);
+    throw error;
+  }
+}
+
+// Setup Groth16 proving system
+async function setupGroth16(circuitName) {
+  const config = CIRCUITS[circuitName];
+  if (!config) {
+    throw new Error(`Circuit ${circuitName} not found`);
+  }
+
+  const outputDir = path.join(ARTIFACTS_DIR, config.name);
+  const r1csPath = path.join(outputDir, `${config.name}.r1cs`);
+  const ptauPath = await downloadPtau(config.ptauPower);
+  
+  if (!fs.existsSync(r1csPath)) {
+    console.log(`Circuit not compiled yet, compiling ${circuitName}...`);
+    await compileCircuit(circuitName);
+  }
+
+  console.log(`🔑 Setting up Groth16 proving system for: ${circuitName}`);
+
+  // Phase 1 - Powers of Tau contribution
+  const zkeyPath0 = path.join(outputDir, `${config.name}_0000.zkey`);
+  const zkeyPath1 = path.join(outputDir, `${config.name}_0001.zkey`);
+  const zkeyFinal = path.join(outputDir, `${config.name}_final.zkey`);
+  const vkeyPath = path.join(outputDir, `verification_key.json`);
+
+  try {
+    // Phase 1: Start ceremony
+    console.log(`📝 Phase 1: Starting ceremony...`);
+    await snarkjs.zKey.newZKey(r1csPath, ptauPath, zkeyPath0);
+
+    // Phase 2: Contribute to ceremony
+    console.log(`📝 Phase 2: Contributing to ceremony...`);
+    await snarkjs.zKey.contribute(zkeyPath0, zkeyPath1, "LightLink contribution", "random entropy");
+
+    // Finalize ceremony
+    console.log(`📝 Finalizing ceremony...`);
+    await snarkjs.zKey.beacon(zkeyPath1, zkeyFinal, "0102030405060708090a0b0c0d0e0f", 10);
+
+    // Export verification key
+    console.log(`🔑 Exporting verification key...`);
+    const vKey = await snarkjs.zKey.exportVerificationKey(zkeyFinal);
+    fs.writeFileSync(vkeyPath, JSON.stringify(vKey, null, 2));
+
+    // Clean up intermediate files
+    if (fs.existsSync(zkeyPath0)) fs.unlinkSync(zkeyPath0);
+    if (fs.existsSync(zkeyPath1)) fs.unlinkSync(zkeyPath1);
+
+    console.log(`✅ Groth16 setup completed for ${circuitName}`);
+    console.log(`   Final zkey: ${zkeyFinal}`);
+    console.log(`   Verification key: ${vkeyPath}`);
+
+    return {
+      zkeyPath: zkeyFinal,
+      vkeyPath: vkeyPath,
+      vkey: vKey
+    };
+
+  } catch (error) {
+    console.error(`❌ Groth16 setup failed: ${error.message}`);
     throw error;
   }
 }
 
 // Generate Solidity verifier contract
-async function generateSolidityVerifier(circuitName) {
-  const config = CIRCUIT_CONFIG[circuitName];
+async function generateVerifierContract(circuitName) {
+  const config = CIRCUITS[circuitName];
   if (!config) {
-    throw new Error(`Unknown circuit: ${circuitName}`);
+    throw new Error(`Circuit ${circuitName} not found`);
   }
+
+  const outputDir = path.join(ARTIFACTS_DIR, config.name);
+  const vkeyPath = path.join(outputDir, 'verification_key.json');
   
+  if (!fs.existsSync(vkeyPath)) {
+    console.log(`Verification key not found, setting up Groth16 for ${circuitName}...`);
+    await setupGroth16(circuitName);
+  }
+
   console.log(`📜 Generating Solidity verifier for: ${circuitName}`);
-  
-  const zkeyPath = path.join(config.outputDir, `${config.name}_final.zkey`);
-  const solidityPath = path.join("contracts", `${config.name.charAt(0).toUpperCase() + config.name.slice(1)}Verifier.sol`);
-  
+
   try {
-    const solidityCode = await snarkjs.zKey.exportSolidityVerifier(zkeyPath);
+    const vKey = JSON.parse(fs.readFileSync(vkeyPath, 'utf8'));
     
-    // Customize the contract name
-    const customizedCode = solidityCode.replace(
-      "contract Verifier",
-      `contract ${config.name.charAt(0).toUpperCase() + config.name.slice(1)}Verifier`
+    // Generate verifier contract
+    const verifierContract = await snarkjs.zKey.exportSolidityVerifier(
+      path.join(outputDir, `${config.name}_final.zkey`)
     );
+
+    // Write verifier contract
+    const contractName = `${config.name.charAt(0).toUpperCase() + config.name.slice(1)}Verifier`;
+    const contractPath = path.join(CONTRACTS_DIR, `${contractName}.sol`);
     
-    fs.writeFileSync(solidityPath, customizedCode);
-    
-    console.log(`✅ Solidity verifier generated: ${solidityPath}`);
-    
-    return solidityPath;
+    // Customize contract with proper name and license
+    const customizedContract = verifierContract
+      .replace(/contract Verifier/g, `contract ${contractName}`)
+      .replace(/pragma solidity \^[\d.]+;/, 'pragma solidity ^0.8.24;')
+      .replace(/\/\/ SPDX-License-Identifier: GPL-3.0\n/, '// SPDX-License-Identifier: MIT\n');
+
+    fs.writeFileSync(contractPath, customizedContract);
+
+    console.log(`✅ Verifier contract generated: ${contractPath}`);
+    return contractPath;
+
   } catch (error) {
-    console.error(`❌ Failed to generate Solidity verifier for ${circuitName}:`, error.message);
+    console.error(`❌ Verifier generation failed: ${error.message}`);
     throw error;
   }
 }
 
-// Generate a proof for given inputs
-async function generateProof(circuitName, inputs) {
-  const config = CIRCUIT_CONFIG[circuitName];
+// Generate proof for testing
+async function generateTestProof(circuitName, inputs) {
+  const config = CIRCUITS[circuitName];
   if (!config) {
-    throw new Error(`Unknown circuit: ${circuitName}`);
+    throw new Error(`Circuit ${circuitName} not found`);
   }
-  
-  console.log(`🔮 Generating proof for: ${circuitName}`);
-  
-  const wasmPath = path.join(config.outputDir, `${config.name}_js`, `${config.name}.wasm`);
-  const zkeyPath = path.join(config.outputDir, `${config.name}_final.zkey`);
-  
+
+  const outputDir = path.join(ARTIFACTS_DIR, config.name);
+  const wasmPath = path.join(outputDir, `${config.name}_js`, `${config.name}.wasm`);
+  const zkeyPath = path.join(outputDir, `${config.name}_final.zkey`);
+
+  if (!fs.existsSync(wasmPath) || !fs.existsSync(zkeyPath)) {
+    throw new Error(`Circuit ${circuitName} not properly set up. Run setup-groth16 first.`);
+  }
+
+  console.log(`🧮 Generating proof for: ${circuitName}`);
+
   try {
     // Calculate witness
-    const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-      inputs,
-      wasmPath,
-      zkeyPath
-    );
-    
-    console.log(`✅ Proof generated for ${circuitName}`);
-    
-    return {
-      proof: proof,
-      publicSignals: publicSignals
-    };
-  } catch (error) {
-    console.error(`❌ Failed to generate proof for ${circuitName}:`, error.message);
-    throw error;
-  }
-}
+    const { witness } = await snarkjs.wtns.calculate(inputs, wasmPath);
 
-// Verify a proof
-async function verifyProof(circuitName, proof, publicSignals) {
-  const config = CIRCUIT_CONFIG[circuitName];
-  if (!config) {
-    throw new Error(`Unknown circuit: ${circuitName}`);
-  }
-  
-  console.log(`🔍 Verifying proof for: ${circuitName}`);
-  
-  const vkeyPath = path.join(config.outputDir, `${config.name}_vkey.json`);
-  
-  try {
-    const vKey = JSON.parse(fs.readFileSync(vkeyPath, "utf8"));
+    // Generate proof
+    const { proof, publicSignals } = await snarkjs.groth16.fullProve(inputs, wasmPath, zkeyPath);
+
+    // Verify proof locally
+    const vkeyPath = path.join(outputDir, 'verification_key.json');
+    const vKey = JSON.parse(fs.readFileSync(vkeyPath, 'utf8'));
     const isValid = await snarkjs.groth16.verify(vKey, publicSignals, proof);
-    
-    console.log(`✅ Proof verification result for ${circuitName}: ${isValid}`);
-    
-    return isValid;
+
+    console.log(`✅ Proof generated and verified locally: ${isValid}`);
+
+    return {
+      proof,
+      publicSignals,
+      isValid
+    };
+
   } catch (error) {
-    console.error(`❌ Failed to verify proof for ${circuitName}:`, error.message);
+    console.error(`❌ Proof generation failed: ${error.message}`);
     throw error;
   }
 }
 
 // Format proof for Solidity
-function formatProofForSolidity(proof) {
+function formatProofForSolidity(proof, publicSignals) {
   return {
     a: [proof.pi_a[0], proof.pi_a[1]],
     b: [[proof.pi_b[0][1], proof.pi_b[0][0]], [proof.pi_b[1][1], proof.pi_b[1][0]]],
-    c: [proof.pi_c[0], proof.pi_c[1]]
+    c: [proof.pi_c[0], proof.pi_c[1]],
+    publicSignals: publicSignals
   };
-}
-
-// Build all circuits
-async function buildAllCircuits() {
-  console.log("🏗️  Building all circuits...");
-  
-  try {
-    // Download ptau files first
-    await downloadPtauFiles();
-    
-    // Build each circuit
-    for (const circuitName of Object.keys(CIRCUIT_CONFIG)) {
-      console.log(`\n📦 Building circuit: ${circuitName}`);
-      
-      // Compile circuit
-      await compileCircuit(circuitName);
-      
-      // Generate trusted setup
-      await generateTrustedSetup(circuitName);
-      
-      // Generate Solidity verifier
-      await generateSolidityVerifier(circuitName);
-      
-      console.log(`✅ Circuit ${circuitName} built successfully`);
-    }
-    
-    console.log("\n🎉 All circuits built successfully!");
-    
-  } catch (error) {
-    console.error("❌ Failed to build circuits:", error);
-    throw error;
-  }
-}
-
-// Test circuit with sample inputs
-async function testCircuit(circuitName, inputs) {
-  console.log(`🧪 Testing circuit: ${circuitName}`);
-  
-  try {
-    // Generate proof
-    const result = await generateProof(circuitName, inputs);
-    
-    // Verify proof
-    const isValid = await verifyProof(circuitName, result.proof, result.publicSignals);
-    
-    if (isValid) {
-      console.log(`✅ Circuit ${circuitName} test passed`);
-      return {
-        proof: formatProofForSolidity(result.proof),
-        publicSignals: result.publicSignals
-      };
-    } else {
-      throw new Error(`Circuit ${circuitName} test failed: proof verification failed`);
-    }
-  } catch (error) {
-    console.error(`❌ Circuit ${circuitName} test failed:`, error.message);
-    throw error;
-  }
 }
 
 // CLI interface
 async function main() {
-  const command = process.argv[2];
-  const circuitName = process.argv[3];
-  
+  const args = process.argv.slice(2);
+  const command = args[0];
+
+  ensureDirectories();
+
   try {
     switch (command) {
-      case "build":
-        if (circuitName) {
-          await compileCircuit(circuitName);
-          await generateTrustedSetup(circuitName);
-          await generateSolidityVerifier(circuitName);
-        } else {
-          await buildAllCircuits();
+      case 'compile':
+        const circuitName = args[1];
+        if (!circuitName) {
+          console.error('Usage: circuit-tools.js compile <circuit-name>');
+          process.exit(1);
         }
-        break;
-        
-      case "compile":
-        if (!circuitName) throw new Error("Circuit name required");
         await compileCircuit(circuitName);
         break;
-        
-      case "setup":
-        if (!circuitName) throw new Error("Circuit name required");
-        await generateTrustedSetup(circuitName);
+
+      case 'setup-groth16':
+        const setupCircuit = args[1] || 'proof_aggregator';
+        await setupGroth16(setupCircuit);
         break;
-        
-      case "verifier":
-        if (!circuitName) throw new Error("Circuit name required");
-        await generateSolidityVerifier(circuitName);
+
+      case 'generate-verifier':
+        const verifierCircuit = args[1] || 'proof_aggregator';
+        await generateVerifierContract(verifierCircuit);
         break;
+
+      case 'test-proof':
+        const testCircuit = args[1] || 'multiplier';
+        const testInputs = testCircuit === 'multiplier' 
+          ? { a: 3, b: 11 }
+          : { /* Add appropriate test inputs for other circuits */ };
         
-      case "test":
-        if (!circuitName) throw new Error("Circuit name required");
-        
-        // Sample inputs for testing
-        const sampleInputs = {
-          multiplier: { a: "3", b: "4" },
-          merkleProof: {
-            root: "123456789",
-            leaf: "987654321",
-            pathElements: ["111", "222", "333"],
-            pathIndices: ["0", "1", "0"]
-          },
-          proofAggregator: {
-            proofs: [
-              ["1", "2", "3", "4", "5", "6", "7", "8"],
-              ["9", "10", "11", "12", "13", "14", "15", "16"],
-              ["17", "18", "19", "20", "21", "22", "23", "24"],
-              ["25", "26", "27", "28", "29", "30", "31", "32"]
-            ],
-            publicSignals: [
-              ["100", "200", "300", "400"],
-              ["500", "600", "700", "800"],
-              ["900", "1000", "1100", "1200"],
-              ["1300", "1400", "1500", "1600"]
-            ],
-            merkleRoots: ["1000", "2000", "3000", "4000"],
-            blockHashes: ["5000", "6000", "7000", "8000"],
-            chainIds: ["1", "42161", "10", "8453"],
-            aggregationSeed: "999999",
-            targetChainId: "1"
-          }
-        };
-        
-        await testCircuit(circuitName, sampleInputs[circuitName]);
+        const result = await generateTestProof(testCircuit, testInputs);
+        console.log('Formatted for Solidity:', formatProofForSolidity(result.proof, result.publicSignals));
         break;
-        
-      case "download-ptau":
-        await downloadPtauFiles();
+
+      case 'compile-all':
+        for (const circuit of Object.keys(CIRCUITS)) {
+          await compileCircuit(circuit);
+        }
         break;
-        
+
+      case 'setup-all':
+        for (const circuit of Object.keys(CIRCUITS)) {
+          await setupGroth16(circuit);
+          await generateVerifierContract(circuit);
+        }
+        break;
+
       default:
         console.log(`
-Usage: node scripts/circuit-tools.js <command> [circuit_name]
+🔧 LightLink Circuit Tools
+
+Usage: node circuit-tools.js <command> [options]
 
 Commands:
-  build [circuit_name]  - Build circuit(s) (compile + setup + verifier)
-  compile <circuit_name> - Compile circuit
-  setup <circuit_name>   - Generate trusted setup
-  verifier <circuit_name> - Generate Solidity verifier
-  test <circuit_name>    - Test circuit with sample inputs
-  download-ptau          - Download Powers of Tau files
+  compile <circuit>          Compile a specific circuit
+  compile-all                Compile all circuits
+  setup-groth16 [circuit]    Setup Groth16 proving system (default: proof_aggregator)
+  generate-verifier [circuit] Generate Solidity verifier contract
+  test-proof [circuit]       Generate a test proof
+  setup-all                  Complete setup for all circuits
 
-Available circuits: ${Object.keys(CIRCUIT_CONFIG).join(", ")}
+Available circuits: ${Object.keys(CIRCUITS).join(', ')}
         `);
+        break;
     }
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    console.error(`❌ Command failed: ${error.message}`);
     process.exit(1);
   }
 }
 
-// Export functions for use in other scripts
-module.exports = {
-  compileCircuit,
-  generateTrustedSetup,
-  generateSolidityVerifier,
-  generateProof,
-  verifyProof,
-  formatProofForSolidity,
-  buildAllCircuits,
-  testCircuit,
-  downloadPtauFiles
-};
-
-// Run CLI if this script is executed directly
 if (require.main === module) {
   main();
-} 
+}
+
+module.exports = {
+  compileCircuit,
+  setupGroth16,
+  generateVerifierContract,
+  generateTestProof,
+  formatProofForSolidity,
+  CIRCUITS
+}; 

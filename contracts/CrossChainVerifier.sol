@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-// CCIP interfaces not available in current Chainlink contracts version
-// import {IRouterClient} from "@chainlink/contracts/src/v0.8/ccip/interfaces/IRouterClient.sol";
-// import {Client} from "@chainlink/contracts/src/v0.8/ccip/libraries/Client.sol";
-// import {CCIPReceiver} from "@chainlink/contracts/src/v0.8/ccip/applications/CCIPReceiver.sol";
+import {IRouterClient} from "@chainlink/contracts-ccip/contracts/interfaces/IRouterClient.sol";
+import {Client} from "@chainlink/contracts-ccip/contracts/libraries/Client.sol";
+import {CCIPReceiver} from "@chainlink/contracts-ccip/contracts/applications/CCIPReceiver.sol";
 import {IERC20} from "@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@chainlink/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/utils/SafeERC20.sol";
 
@@ -18,7 +17,7 @@ interface IZKProofAggregator {
  * @dev Handles cross-chain proof verification using Chainlink CCIP
  * @notice This contract enables sending and receiving ZK proofs across different blockchains
  */
-contract CrossChainVerifier {
+contract CrossChainVerifier is CCIPReceiver {
     using SafeERC20 for IERC20;
 
     // Events
@@ -50,6 +49,7 @@ contract CrossChainVerifier {
     }
 
     // State variables
+    IRouterClient private s_router;
     IERC20 private s_linkToken;
     IZKProofAggregator private s_zkAggregator;
     
@@ -91,25 +91,24 @@ contract CrossChainVerifier {
     }
 
     constructor(
-        address /* _router */,
+        address _router,
         address _link,
         address _zkAggregator
-    ) {
+    ) CCIPReceiver(_router) {
         owner = msg.sender;
-        // s_router = IRouterClient(_router); // CCIP not available
+        s_router = IRouterClient(_router);
         s_linkToken = IERC20(_link);
         s_zkAggregator = IZKProofAggregator(_zkAggregator);
     }
 
     /**
-     * @dev Send ZK proof to another chain via CCIP (DISABLED - CCIP not available)
+     * @dev Send ZK proof to another chain via CCIP
      * @param destinationChainSelector The chain selector of the destination chain
      * @param receiver The address to receive the proof on the destination chain
      * @param stateRoot The state root being proven
      * @param zkProof The ZK proof data
      * @param publicInputs The public inputs for the proof
      */
-    /*
     function sendProofCrossChain(
         uint64 destinationChainSelector,
         address receiver,
@@ -165,12 +164,10 @@ contract CrossChainVerifier {
 
         return messageId;
     }
-    */
 
     /**
-     * @dev Receive and process cross-chain proof via CCIP (DISABLED - CCIP not available)
+     * @dev Receive and process cross-chain proof via CCIP
      */
-    /*
     function _ccipReceive(
         Client.Any2EVMMessage memory any2EvmMessage
     ) internal override onlyAllowlisted(
@@ -209,7 +206,6 @@ contract CrossChainVerifier {
 
         emit StateRootVerified(proof.stateRoot, any2EvmMessage.sourceChainSelector, isValid);
     }
-    */
 
     /**
      * @dev Verify a cross-chain ZK proof

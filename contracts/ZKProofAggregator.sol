@@ -7,6 +7,8 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_3_0/FunctionsClient.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
+// Using Chainlink's ownership model instead of OpenZeppelin's
+import "./Groth16Verifier.sol";
 
 /**
  * @title ZKProofAggregator
@@ -63,6 +65,11 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
     
     // ZK Verification
     mapping(bytes32 => bool) public verifiedProofs;
+    Groth16Verifier public immutable groth16Verifier;
+    
+    // Proof aggregation tracking
+    mapping(uint256 => bytes32[]) public aggregatedProofHashes;
+    mapping(bytes32 => bool) public usedProofHashes;
     
     // Access control
     mapping(address => bool) public authorizedCallers;
@@ -78,12 +85,14 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
         uint256 vrfSubscriptionId,
         bytes32 vrfKeyHash,
         uint64 functionsSubscriptionId,
-        bytes32 functionsDonId
+        bytes32 functionsDonId,
+        address groth16VerifierAddress
     ) VRFConsumerBaseV2Plus(vrfCoordinator) FunctionsClient(functionsRouter) {
         s_subscriptionId = vrfSubscriptionId;
         s_keyHash = vrfKeyHash;
         s_functionsSubscriptionId = functionsSubscriptionId;
         s_functionsDonId = functionsDonId;
+        groth16Verifier = Groth16Verifier(groth16VerifierAddress);
         authorizedCallers[msg.sender] = true;
         lastUpkeepTimestamp = block.timestamp;
     }
@@ -233,13 +242,38 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
     }
 
     /**
-     * @dev Verify ZK proof on-chain
-     * @notice This is a simplified verification - in practice, use generated Solidity verifier
+     * @dev Verify ZK proof on-chain using Groth16 verifier
+     * @param proof The serialized Groth16 proof
+     * @param publicInputs The public inputs for verification
      */
-    function _verifyZKProof(bytes memory proof, bytes memory publicInputs) internal pure returns (bool) {
-        // Placeholder for actual ZK proof verification
-        // In a real implementation, this would call the generated Solidity verifier contract
-        return proof.length > 0 && publicInputs.length > 0;
+    function _verifyZKProof(bytes memory proof, bytes memory publicInputs) internal view returns (bool) {
+        if (proof.length != 256) return false; // Groth16 proof should be exactly 256 bytes
+        
+        // Decode Groth16 proof components
+        uint256[2] memory a;
+        uint256[2][2] memory b;
+        uint256[2] memory c;
+        uint256[] memory inputs;
+        
+        // Extract proof components (8 uint256 values)
+        assembly {
+            let proofPtr := add(proof, 0x20)
+            mstore(a, mload(proofPtr))
+            mstore(add(a, 0x20), mload(add(proofPtr, 0x20)))
+            
+            mstore(b, mload(add(proofPtr, 0x40)))
+            mstore(add(b, 0x20), mload(add(proofPtr, 0x60)))
+            mstore(add(b, 0x40), mload(add(proofPtr, 0x80)))
+            mstore(add(b, 0x60), mload(add(proofPtr, 0xA0)))
+            
+            mstore(c, mload(add(proofPtr, 0xC0)))
+            mstore(add(c, 0x20), mload(add(proofPtr, 0xE0)))
+        }
+        
+        // Decode public inputs
+        inputs = abi.decode(publicInputs, (uint256[]));
+        
+        return groth16Verifier.verifyProof(a, b, c, inputs);
     }
 
     /**
@@ -267,6 +301,45 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
      */
     function isStateVerified(bytes32 stateRoot) external view returns (bool) {
         return verifiedProofs[stateRoot];
+    }
+
+    /**
+     * @dev Aggregate multiple ZK proofs into a single verification
+     * @param proofs Array of proof data to aggregate
+     * @param publicInputsArray Array of public inputs for each proof
+     * @return aggregatedHash The hash representing the aggregated proof
+     */
+    function aggregateProofs(
+        bytes[] calldata proofs,
+        bytes[] calldata publicInputsArray
+    ) external onlyAuthorized returns (bytes32 aggregatedHash) {
+        require(proofs.length == publicInputsArray.length && proofs.length > 0, "Invalid input arrays");
+        require(proofs.length <= 10, "Too many proofs to aggregate"); // Limit for gas efficiency
+        
+        bytes32[] memory proofHashes = new bytes32[](proofs.length);
+        
+        // Verify each individual proof and collect hashes
+        for (uint256 i = 0; i < proofs.length; i++) {
+            require(_verifyZKProof(proofs[i], publicInputsArray[i]), "Invalid proof in aggregation");
+            
+            bytes32 proofHash = keccak256(abi.encodePacked(proofs[i], publicInputsArray[i]));
+            require(!usedProofHashes[proofHash], "Proof already used in aggregation");
+            
+            proofHashes[i] = proofHash;
+            usedProofHashes[proofHash] = true;
+        }
+        
+        // Create aggregated hash
+        aggregatedHash = keccak256(abi.encodePacked(proofHashes, block.timestamp, msg.sender));
+        
+        // Store the aggregation
+        uint256 requestId = ++requestCounter;
+        aggregatedProofHashes[requestId] = proofHashes;
+        verifiedProofs[aggregatedHash] = true;
+        
+        emit ProofVerified(requestId, true, aggregatedHash);
+        
+        return aggregatedHash;
     }
 
     /**
