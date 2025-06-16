@@ -44,7 +44,13 @@ template ProofAggregator(nProofs, merkleDepth, blockDepth) {
         merkleVerifiers[i] = MerkleInclusionVerifier(merkleDepth);
         merkleVerifiers[i].root <== merkleRoots[i];
         merkleVerifiers[i].leaf <== blockHashes[i];
-        merkleVerifiers[i].pathElements <== publicSignals[i]; // Simplified path
+        
+        // For simplicity, use the first public signal for all path elements
+        // In a real implementation, path elements would be proper inputs
+        for (var j = 0; j < merkleDepth; j++) {
+            merkleVerifiers[i].pathElements[j] <== publicSignals[i][0];
+            merkleVerifiers[i].pathIndices[j] <== 0; // Simplified - all left path
+        }
         
         // Verify block validity
         blockVerifiers[i] = BlockValidityVerifier(blockDepth);
@@ -177,15 +183,20 @@ template ChainMaskComputer(nChains) {
     
     component chainBits[nChains];
     signal chainMask[nChains + 1];
+    signal powerOfTwo[nChains];
     chainMask[0] <== 0;
     
     for (var i = 0; i < nChains; i++) {
-        // Convert chain ID to bit position (simplified)
+        // Convert chain ID to bit position (simplified - just take first bit)
         chainBits[i] = Num2Bits(8);
         chainBits[i].in <== chainIds[i];
         
+        // Calculate power of 2 using quadratic constraints
+        // For simplicity, just use the first bit as 1 or 2
+        powerOfTwo[i] <== 1 + chainBits[i].out[0];
+        
         // Set bit in mask for this chain
-        chainMask[i + 1] <== chainMask[i] + (1 << chainBits[i].out[0]);
+        chainMask[i + 1] <== chainMask[i] + powerOfTwo[i];
     }
     
     mask <== chainMask[nChains];
@@ -264,4 +275,4 @@ template RecursiveProofVerifier(maxDepth) {
 }
 
 // Main component for testing with 4 proofs, depth 8 Merkle trees
-component main = ProofAggregator(4, 8, 8); 
+component main {public [targetChainId]} = ProofAggregator(4, 8, 8); 

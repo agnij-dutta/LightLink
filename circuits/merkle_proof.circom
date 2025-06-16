@@ -2,6 +2,7 @@ pragma circom 2.0.0;
 
 include "circomlib/circuits/poseidon.circom";
 include "circomlib/circuits/mux1.circom";
+include "circomlib/circuits/comparators.circom";
 
 /*
  * Merkle Proof Verification Circuit
@@ -10,10 +11,10 @@ include "circomlib/circuits/mux1.circom";
  */
 
 template MerkleProof(levels) {
-    // Private inputs
-    signal private input leaf;                      // The leaf we want to prove inclusion for
-    signal private input pathElements[levels];      // Hash values of sibling nodes
-    signal private input pathIndices[levels];       // 0 if sibling is on the left, 1 if on the right
+    // Inputs
+    signal input leaf;                      // The leaf we want to prove inclusion for
+    signal input pathElements[levels];      // Hash values of sibling nodes
+    signal input pathIndices[levels];       // 0 if sibling is on the left, 1 if on the right
     
     // Public inputs/outputs
     signal input root;                              // The known Merkle root (public)
@@ -39,7 +40,7 @@ template MerkleProof(levels) {
         // Hash the pair
         hashers[i] = Poseidon(2);
         hashers[i].inputs[0] <== mux[i].out;
-        hashers[i].inputs[1] <== pathIndices[i] * pathElements[i] + (1 - pathIndices[i]) * intermediateHashes[i];
+        hashers[i].inputs[1] <== pathElements[i];
         
         intermediateHashes[i + 1] <== hashers[i].out;
     }
@@ -52,30 +53,5 @@ template MerkleProof(levels) {
     isValid <== rootCheck.out;
 }
 
-/*
- * Binary equality check
- */
-template IsEqual() {
-    signal input in[2];
-    signal output out;
-    
-    component eq = IsZero();
-    eq.in <== in[0] - in[1];
-    out <== eq.out;
-}
-
-/*
- * Check if input is zero
- */
-template IsZero() {
-    signal input in;
-    signal output out;
-    
-    signal inv;
-    inv <-- in != 0 ? 1 / in : 0;
-    out <== -in * inv + 1;
-    in * out === 0;
-}
-
 // Instantiate main component with 8 levels (256 leaves max)
-component main = MerkleProof(8); 
+component main {public [root]} = MerkleProof(8); 

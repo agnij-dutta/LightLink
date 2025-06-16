@@ -7,9 +7,9 @@ pragma circom 2.0.0;
  */
 
 template Multiplier() {
-    // Private inputs (witnesses)
-    signal private input a;
-    signal private input b;
+    // Inputs (witnesses)
+    signal input a;
+    signal input b;
     
     // Public output
     signal output c;
@@ -19,4 +19,4 @@ template Multiplier() {
 }
 
 // Instantiate the main component
-component main = Multiplier(); 
+component main {public [a, b]} = Multiplier(); 

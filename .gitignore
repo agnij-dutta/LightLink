@@ -2,6 +2,7 @@ node_modules/
 artifacts/
 cache/
 build/
+circom/
 .env
 .env.local
 .env.development.local
