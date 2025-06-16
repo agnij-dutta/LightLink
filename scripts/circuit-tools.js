@@ -21,7 +21,7 @@ const CIRCUITS = {
     file: 'proof_aggregator.circom',
     template: 'ProofAggregator',
     params: [4, 8, 32], // nProofs, merkleDepth, blockDepth
-    ptauPower: 15
+    ptauPower: 17
   },
   merkle_proof: {
     name: 'merkle_proof', 
@@ -60,7 +60,7 @@ async function downloadPtau(power = 15) {
   console.log(`📥 Downloading Powers of Tau file (2^${power})...`);
   
   try {
-    const url = `https://hermez.s3-eu-west-1.amazonaws.com/powersOfTau28_hez_final_${power}.ptau`;
+    const url = `https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_${power}.ptau`;
     await execAsync(`wget -O ${ptauPath} ${url}`);
     console.log(`✅ Downloaded: ${ptauPath}`);
     return ptauPath;
@@ -91,7 +91,7 @@ async function compileCircuit(circuitName) {
 
   console.log(`🔨 Compiling circuit: ${circuitName}`);
   
-  const cmd = `circom ${circuitPath} --r1cs --wasm --sym -o ${outputDir}`;
+  const cmd = `circom ${circuitPath} --r1cs --wasm --sym -o ${outputDir} -l node_modules`;
   
   try {
     const { stdout, stderr } = await execAsync(cmd);
@@ -135,30 +135,65 @@ async function setupGroth16(circuitName) {
   const vkeyPath = path.join(outputDir, `verification_key.json`);
 
   try {
+    // Show circuit stats first
+    console.log(`📊 Circuit statistics:`);
+    console.log(`   R1CS file: ${r1csPath}`);
+    console.log(`   Powers of Tau: ${ptauPath} (power ${config.ptauPower})`);
+    
+    // Check file sizes
+    const r1csStats = fs.statSync(r1csPath);
+    const ptauStats = fs.statSync(ptauPath);
+    console.log(`   R1CS size: ${(r1csStats.size / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`   PTAU size: ${(ptauStats.size / 1024 / 1024).toFixed(2)} MB`);
+    console.log(`   Max constraints: ${Math.pow(2, config.ptauPower).toLocaleString()}`);
+
     // Phase 1: Start ceremony
-    console.log(`📝 Phase 1: Starting ceremony...`);
+    console.log(`📝 Phase 1: Starting ceremony (this may take several minutes)...`);
+    console.log(`   ⏳ Generating initial zkey file from R1CS and Powers of Tau...`);
+    const phase1Start = Date.now();
     await snarkjs.zKey.newZKey(r1csPath, ptauPath, zkeyPath0);
+    const phase1Time = ((Date.now() - phase1Start) / 1000).toFixed(1);
+    console.log(`   ✅ Phase 1 completed in ${phase1Time}s - Initial zkey generated`);
 
     // Phase 2: Contribute to ceremony
     console.log(`📝 Phase 2: Contributing to ceremony...`);
+    console.log(`   ⏳ Adding contribution with random entropy...`);
+    const phase2Start = Date.now();
     await snarkjs.zKey.contribute(zkeyPath0, zkeyPath1, "LightLink contribution", "random entropy");
+    const phase2Time = ((Date.now() - phase2Start) / 1000).toFixed(1);
+    console.log(`   ✅ Phase 2 completed in ${phase2Time}s - Contribution added`);
 
     // Finalize ceremony
     console.log(`📝 Finalizing ceremony...`);
+    console.log(`   ⏳ Applying beacon to finalize setup...`);
+    const finalizeStart = Date.now();
     await snarkjs.zKey.beacon(zkeyPath1, zkeyFinal, "0102030405060708090a0b0c0d0e0f", 10);
+    const finalizeTime = ((Date.now() - finalizeStart) / 1000).toFixed(1);
+    console.log(`   ✅ Ceremony finalized in ${finalizeTime}s`);
 
     // Export verification key
     console.log(`🔑 Exporting verification key...`);
     const vKey = await snarkjs.zKey.exportVerificationKey(zkeyFinal);
     fs.writeFileSync(vkeyPath, JSON.stringify(vKey, null, 2));
 
-    // Clean up intermediate files
-    if (fs.existsSync(zkeyPath0)) fs.unlinkSync(zkeyPath0);
-    if (fs.existsSync(zkeyPath1)) fs.unlinkSync(zkeyPath1);
-
-    console.log(`✅ Groth16 setup completed for ${circuitName}`);
-    console.log(`   Final zkey: ${zkeyFinal}`);
+    // Show final file sizes
+    const zkeyStats = fs.statSync(zkeyFinal);
+    console.log(`📊 Generated files:`);
+    console.log(`   Final zkey: ${zkeyFinal} (${(zkeyStats.size / 1024 / 1024).toFixed(2)} MB)`);
     console.log(`   Verification key: ${vkeyPath}`);
+
+    // Clean up intermediate files
+    console.log(`🧹 Cleaning up intermediate files...`);
+    if (fs.existsSync(zkeyPath0)) {
+      fs.unlinkSync(zkeyPath0);
+      console.log(`   Removed: ${path.basename(zkeyPath0)}`);
+    }
+    if (fs.existsSync(zkeyPath1)) {
+      fs.unlinkSync(zkeyPath1);
+      console.log(`   Removed: ${path.basename(zkeyPath1)}`);
+    }
+
+    console.log(`✅ Groth16 setup completed for ${circuitName}!`);
 
     return {
       zkeyPath: zkeyFinal,
