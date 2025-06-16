@@ -44,9 +44,9 @@ async function main() {
     
     // Deploy Groth16 Verifier first
     console.log("   Deploying Groth16 Verifier...");
-    const Groth16Verifier = await ethers.getContractFactory("Groth16Verifier");
-    const groth16Verifier = await Groth16Verifier.deploy();
-    await groth16Verifier.waitForDeployment();
+      const Groth16Verifier = await ethers.getContractFactory("contracts/Groth16Verifier.sol:Groth16Verifier");
+  const groth16Verifier = await Groth16Verifier.deploy();
+  await groth16Verifier.waitForDeployment();
     const groth16Address = await groth16Verifier.getAddress();
     console.log(`   ✅ Groth16 Verifier: ${groth16Address}`);
     

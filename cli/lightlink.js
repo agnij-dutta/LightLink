@@ -1,23 +1,36 @@
 #!/usr/bin/env node
 
-const { Command } = require('commander');
-const inquirer = require('inquirer');
-const chalk = require('chalk');
-const ora = require('ora');
-const fs = require('fs');
-const path = require('path');
-const { ethers } = require('ethers');
-require('dotenv').config();
+import { Command } from 'commander';
+import chalk from 'chalk';
+import ora from 'ora';
+import fs from 'fs';
+import path from 'path';
+import { ethers } from 'ethers';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+// Get directory name in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables
+dotenv.config();
 
 const program = new Command();
 
 // Contract ABIs (simplified - in production these would be imported from artifacts)
-const ZK_PROOF_AGGREGATOR_ABI = require('../artifacts/contracts/ZKProofAggregator.sol/ZKProofAggregator.json').abi;
-const GROTH16_VERIFIER_ABI = require('../artifacts/contracts/Groth16Verifier.sol/Groth16Verifier.json').abi;
-const CROSS_CHAIN_VERIFIER_ABI = require('../artifacts/contracts/CrossChainVerifier.sol/CrossChainVerifier.json').abi;
+const ZK_PROOF_AGGREGATOR_ABI = JSON.parse(fs.readFileSync(path.join(__dirname, '../artifacts/contracts/ZKProofAggregator.sol/ZKProofAggregator.json'), 'utf8')).abi;
+const GROTH16_VERIFIER_ABI = JSON.parse(fs.readFileSync(path.join(__dirname, '../artifacts/contracts/Groth16Verifier.sol/Groth16Verifier.json'), 'utf8')).abi;
+const CROSS_CHAIN_VERIFIER_ABI = JSON.parse(fs.readFileSync(path.join(__dirname, '../artifacts/contracts/CrossChainVerifier.sol/CrossChainVerifier.json'), 'utf8')).abi;
 
 // Network configurations
 const NETWORKS = {
+  hardhat: {
+    name: 'Hardhat Local Network',
+    rpcUrl: 'http://127.0.0.1:8545',
+    chainId: 31337,
+    blockExplorer: 'http://localhost:8545',
+  },
   fuji: {
     name: 'Avalanche Fuji Testnet',
     rpcUrl: 'https://api.avax-test.network/ext/bc/C/rpc',
@@ -73,16 +86,22 @@ function saveDeployedContracts() {
 async function initializeWallet(networkName) {
   const network = NETWORKS[networkName];
   if (!network) {
-    throw new Error(`Network ${networkName} not supported`);
+    throw new Error(`Network ${networkName} not supported. Available: ${Object.keys(NETWORKS).join(', ')}`);
   }
 
   provider = new ethers.JsonRpcProvider(network.rpcUrl);
   
-  if (!process.env.PRIVATE_KEY) {
-    throw new Error('PRIVATE_KEY environment variable not set');
+  // For hardhat local network, use the first default account
+  if (networkName === 'hardhat') {
+    // Use hardhat default private key
+    const defaultPrivateKey = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+    signer = new ethers.Wallet(defaultPrivateKey, provider);
+  } else {
+    if (!process.env.PRIVATE_KEY) {
+      throw new Error('PRIVATE_KEY environment variable not set');
+    }
+    signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
   }
-  
-  signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
   
   console.log(chalk.green(`Connected to ${network.name}`));
   console.log(chalk.blue(`Wallet address: ${signer.address}`));
@@ -91,337 +110,175 @@ async function initializeWallet(networkName) {
   console.log(chalk.blue(`Balance: ${ethers.formatEther(balance)} ETH`));
 }
 
-// Deploy contracts command
+// Request proof command
 program
-  .command('deploy')
-  .description('Deploy LightLink ZK Oracle contracts')
-  .option('-n, --network <network>', 'Network to deploy to', 'fuji')
-  .option('--vrf-subscription-id <id>', 'VRF Subscription ID')
-  .option('--functions-subscription-id <id>', 'Functions Subscription ID')
-  .option('--skip-verification', 'Skip contract verification')
+  .command('request-proof')
+  .description('Request a ZK proof for a specific chain and block')
+  .option('-n, --network <network>', 'Network to connect to', 'hardhat')
+  .option('-c, --chain <chain>', 'Source chain to verify', 'ethereum')
+  .option('-b, --block <block>', 'Block number to verify', 'latest')
+  .option('-a, --address <address>', 'ZKProofAggregator contract address')
   .action(async (options) => {
-    const spinner = ora('Deploying contracts...').start();
+    const spinner = ora('Requesting ZK proof...').start();
     
     try {
       await initializeWallet(options.network);
-      const network = NETWORKS[options.network];
+      loadDeployedContracts();
       
-      // Get deployment parameters
-      const deployParams = await getDeploymentParams(options, network);
-      
-      // Deploy Groth16 Verifier first
-      spinner.text = 'Deploying Groth16 Verifier...';
-      const groth16VerifierFactory = await ethers.getContractFactory('Groth16Verifier', signer);
-      const groth16Verifier = await groth16VerifierFactory.deploy();
-      await groth16Verifier.waitForDeployment();
-      const groth16Address = await groth16Verifier.getAddress();
-      
-      spinner.text = 'Deploying ZK Proof Aggregator...';
-      const zkAggregatorFactory = await ethers.getContractFactory('ZKProofAggregator', signer);
-      const zkAggregator = await zkAggregatorFactory.deploy(
-        deployParams.vrfCoordinator,
-        deployParams.functionsRouter,
-        deployParams.vrfSubscriptionId,
-        deployParams.keyHash,
-        deployParams.functionsSubscriptionId,
-        deployParams.functionsDonId,
-        groth16Address
-      );
-      await zkAggregator.waitForDeployment();
-      const zkAggregatorAddress = await zkAggregator.getAddress();
-      
-      spinner.text = 'Deploying Cross Chain Verifier...';
-      const crossChainFactory = await ethers.getContractFactory('CrossChainVerifier', signer);
-      const crossChainVerifier = await crossChainFactory.deploy(
-        network.ccipRouter,
-        network.linkToken,
-        zkAggregatorAddress
-      );
-      await crossChainVerifier.waitForDeployment();
-      const crossChainAddress = await crossChainVerifier.getAddress();
-      
-      // Save deployment info
-      if (!deployedContracts[options.network]) {
-        deployedContracts[options.network] = {};
+      let contractAddress = options.address;
+      if (!contractAddress && deployedContracts[options.network]) {
+        contractAddress = deployedContracts[options.network].zkProofAggregator;
       }
       
-      deployedContracts[options.network] = {
-        groth16Verifier: groth16Address,
-        zkProofAggregator: zkAggregatorAddress,
-        crossChainVerifier: crossChainAddress,
-        deployedAt: new Date().toISOString(),
-        deployer: signer.address
-      };
+      if (!contractAddress) {
+        throw new Error('No ZKProofAggregator contract address found. Use --address option or deploy first.');
+      }
       
-      saveDeployedContracts();
+      const zkProofAggregator = new ethers.Contract(contractAddress, ZK_PROOF_AGGREGATOR_ABI, signer);
       
-      spinner.succeed('Contracts deployed successfully!');
+      // Convert block number
+      let blockNumber = 0;
+      if (options.block === 'latest') {
+        const latestBlock = await provider.getBlockNumber();
+        blockNumber = latestBlock;
+      } else {
+        blockNumber = parseInt(options.block);
+      }
       
-      console.log(chalk.green('\n📄 Deployment Summary:'));
-      console.log(chalk.blue(`Groth16 Verifier: ${groth16Address}`));
-      console.log(chalk.blue(`ZK Proof Aggregator: ${zkAggregatorAddress}`));
-      console.log(chalk.blue(`Cross Chain Verifier: ${crossChainAddress}`));
-      console.log(chalk.blue(`Block Explorer: ${network.blockExplorer}`));
+      spinner.text = `Requesting proof for ${options.chain} block ${blockNumber}...`;
       
-      if (!options.skipVerification) {
-        console.log(chalk.yellow('\n⏳ Contract verification will be available shortly...'));
+      const tx = await zkProofAggregator.requestProofVerification(options.chain, blockNumber);
+      const receipt = await tx.wait();
+      
+      spinner.succeed('Proof request submitted successfully!');
+      
+      console.log(chalk.green('\n📄 Transaction Details:'));
+      console.log(chalk.blue(`Transaction Hash: ${receipt.hash}`));
+      console.log(chalk.blue(`Gas Used: ${receipt.gasUsed.toString()}`));
+      console.log(chalk.blue(`Block Number: ${receipt.blockNumber}`));
+      
+      // Get request ID from logs
+      const requestEvent = receipt.logs.find(log => {
+        try {
+          const parsedLog = zkProofAggregator.interface.parseLog(log);
+          return parsedLog.name === 'ProofRequested';
+        } catch {
+          return false;
+        }
+      });
+      
+      if (requestEvent) {
+        const parsedLog = zkProofAggregator.interface.parseLog(requestEvent);
+        console.log(chalk.blue(`Request ID: ${parsedLog.args.requestId}`));
       }
       
     } catch (error) {
-      spinner.fail('Deployment failed');
+      spinner.fail('Proof request failed');
       console.error(chalk.red(error.message));
       process.exit(1);
     }
   });
 
-// Verify contracts command
-program
-  .command('verify')
-  .description('Verify deployed contracts on block explorer')
-  .option('-n, --network <network>', 'Network to verify on', 'fuji')
-  .action(async (options) => {
-    const spinner = ora('Verifying contracts...').start();
-    
-    try {
-      loadDeployedContracts();
-      
-      if (!deployedContracts[options.network]) {
-        throw new Error(`No deployed contracts found for network ${options.network}`);
-      }
-      
-      const contracts = deployedContracts[options.network];
-      
-      // Verification logic would go here
-      // For now, just display the contract addresses for manual verification
-      spinner.succeed('Contract verification completed!');
-      
-      console.log(chalk.green('\n🔍 Contract Verification:'));
-      console.log(chalk.blue(`Groth16 Verifier: ${contracts.groth16Verifier}`));
-      console.log(chalk.blue(`ZK Proof Aggregator: ${contracts.zkProofAggregator}`));
-      console.log(chalk.blue(`Cross Chain Verifier: ${contracts.crossChainVerifier}`));
-      
-    } catch (error) {
-      spinner.fail('Verification failed');
-      console.error(chalk.red(error.message));
-    }
-  });
-
-// Request proof command
-program
-  .command('request-proof')
-  .description('Request ZK proof verification')
-  .option('-n, --network <network>', 'Network to use', 'fuji')
-  .option('--source-chain <chain>', 'Source chain identifier')
-  .option('--block-number <number>', 'Block number to verify (0 for random)')
-  .action(async (options) => {
-    const spinner = ora('Requesting proof verification...').start();
-    
-    try {
-      await initializeWallet(options.network);
-      loadDeployedContracts();
-      
-      const contracts = deployedContracts[options.network];
-      if (!contracts) {
-        throw new Error(`No deployed contracts found for network ${options.network}`);
-      }
-      
-      const zkAggregator = new ethers.Contract(
-        contracts.zkProofAggregator,
-        ZK_PROOF_AGGREGATOR_ABI,
-        signer
-      );
-      
-      const sourceChain = options.sourceChain || 'ethereum';
-      const blockNumber = parseInt(options.blockNumber) || 0;
-      
-      const tx = await zkAggregator.requestProofVerification(sourceChain, blockNumber);
-      const receipt = await tx.wait();
-      
-      spinner.succeed('Proof verification requested!');
-      
-      console.log(chalk.green('\n✅ Request Details:'));
-      console.log(chalk.blue(`Transaction Hash: ${receipt.hash}`));
-      console.log(chalk.blue(`Source Chain: ${sourceChain}`));
-      console.log(chalk.blue(`Block Number: ${blockNumber === 0 ? 'Random' : blockNumber}`));
-      
-    } catch (error) {
-      spinner.fail('Request failed');
-      console.error(chalk.red(error.message));
-    }
-  });
-
 // Check proof status command
 program
-  .command('check-proof')
-  .description('Check proof verification status')
-  .option('-n, --network <network>', 'Network to use', 'fuji')
-  .option('--request-id <id>', 'Request ID to check')
-  .option('--state-root <root>', 'State root to check')
+  .command('check-status')
+  .description('Check the status of a proof request')
+  .option('-n, --network <network>', 'Network to connect to', 'hardhat')
+  .option('-r, --request-id <id>', 'Request ID to check')
+  .option('-a, --address <address>', 'ZKProofAggregator contract address')
   .action(async (options) => {
-    try {
-      await initializeWallet(options.network);
-      loadDeployedContracts();
-      
-      const contracts = deployedContracts[options.network];
-      if (!contracts) {
-        throw new Error(`No deployed contracts found for network ${options.network}`);
-      }
-      
-      const zkAggregator = new ethers.Contract(
-        contracts.zkProofAggregator,
-        ZK_PROOF_AGGREGATOR_ABI,
-        signer
-      );
-      
-      if (options.requestId) {
-        const request = await zkAggregator.getProofRequest(options.requestId);
-        console.log(chalk.green('\n📊 Request Status:'));
-        console.log(chalk.blue(`Requester: ${request.requester}`));
-        console.log(chalk.blue(`Source Chain: ${request.sourceChain}`));
-        console.log(chalk.blue(`Block Number: ${request.blockNumber.toString()}`));
-        console.log(chalk.blue(`Completed: ${request.isCompleted}`));
-        console.log(chalk.blue(`Valid: ${request.isValid}`));
-      }
-      
-      if (options.stateRoot) {
-        const isVerified = await zkAggregator.isStateVerified(options.stateRoot);
-        console.log(chalk.green('\n🔍 State Root Status:'));
-        console.log(chalk.blue(`State Root: ${options.stateRoot}`));
-        console.log(chalk.blue(`Verified: ${isVerified}`));
-      }
-      
-    } catch (error) {
-      console.error(chalk.red(error.message));
-    }
-  });
-
-// Aggregate proofs command
-program
-  .command('aggregate')
-  .description('Aggregate multiple ZK proofs')
-  .option('-n, --network <network>', 'Network to use', 'fuji')
-  .option('--proof-files <files>', 'Comma-separated list of proof files')
-  .action(async (options) => {
-    const spinner = ora('Aggregating proofs...').start();
+    const spinner = ora('Checking proof status...').start();
     
     try {
       await initializeWallet(options.network);
       loadDeployedContracts();
       
-      const contracts = deployedContracts[options.network];
-      if (!contracts) {
-        throw new Error(`No deployed contracts found for network ${options.network}`);
+      if (!options.requestId) {
+        throw new Error('Request ID is required. Use --request-id option.');
       }
       
-      if (!options.proofFiles) {
-        throw new Error('Proof files must be specified');
+      let contractAddress = options.address;
+      if (!contractAddress && deployedContracts[options.network]) {
+        contractAddress = deployedContracts[options.network].zkProofAggregator;
       }
       
-      const proofFiles = options.proofFiles.split(',');
-      const proofs = [];
-      const publicInputs = [];
-      
-      // Load proof files
-      for (const file of proofFiles) {
-        const proofData = JSON.parse(fs.readFileSync(file.trim(), 'utf8'));
-        proofs.push(proofData.proof);
-        publicInputs.push(proofData.publicInputs);
+      if (!contractAddress) {
+        throw new Error('No ZKProofAggregator contract address found. Use --address option or deploy first.');
       }
       
-      const zkAggregator = new ethers.Contract(
-        contracts.zkProofAggregator,
-        ZK_PROOF_AGGREGATOR_ABI,
-        signer
-      );
+      const zkProofAggregator = new ethers.Contract(contractAddress, ZK_PROOF_AGGREGATOR_ABI, signer);
       
-      const tx = await zkAggregator.aggregateProofs(proofs, publicInputs);
-      const receipt = await tx.wait();
+      const request = await zkProofAggregator.getProofRequest(options.requestId);
+      const isVerified = await zkProofAggregator.isStateVerified(request.sourceChain, request.blockNumber);
       
-      spinner.succeed('Proofs aggregated successfully!');
+      spinner.succeed('Status check completed!');
       
-      console.log(chalk.green('\n🔗 Aggregation Details:'));
-      console.log(chalk.blue(`Transaction Hash: ${receipt.hash}`));
-      console.log(chalk.blue(`Gas Used: ${receipt.gasUsed.toString()}`));
+      console.log(chalk.green('\n📄 Proof Request Status:'));
+      console.log(chalk.blue(`Request ID: ${options.requestId}`));
+      console.log(chalk.blue(`Source Chain: ${request.sourceChain}`));
+      console.log(chalk.blue(`Block Number: ${request.blockNumber.toString()}`));
+      console.log(chalk.blue(`Requester: ${request.requester}`));
+      console.log(chalk.blue(`Timestamp: ${new Date(Number(request.timestamp) * 1000).toISOString()}`));
+      console.log(chalk.blue(`Verified: ${isVerified ? 'Yes' : 'No'}`));
       
     } catch (error) {
-      spinner.fail('Aggregation failed');
+      spinner.fail('Status check failed');
       console.error(chalk.red(error.message));
+      process.exit(1);
     }
   });
 
-// Interactive setup command
+// List contracts command
 program
-  .command('setup')
-  .description('Interactive setup wizard')
-  .action(async () => {
-    console.log(chalk.green.bold('\n🚀 LightLink ZK Oracle Setup Wizard\n'));
+  .command('list-contracts')
+  .description('List deployed contract addresses')
+  .option('-n, --network <network>', 'Network to list contracts for', 'hardhat')
+  .action(async (options) => {
+    loadDeployedContracts();
     
-    const answers = await inquirer.prompt([
-      {
-        type: 'list',
-        name: 'network',
-        message: 'Select deployment network:',
-        choices: Object.keys(NETWORKS).map(key => ({
-          name: `${NETWORKS[key].name} (${key})`,
-          value: key
-        }))
-      },
-      {
-        type: 'confirm',
-        name: 'deploy',
-        message: 'Deploy contracts?',
-        default: true
-      },
-      {
-        type: 'input',
-        name: 'vrfSubscriptionId',
-        message: 'VRF Subscription ID:',
-        when: (answers) => answers.deploy
-      },
-      {
-        type: 'input',
-        name: 'functionsSubscriptionId',
-        message: 'Functions Subscription ID:',
-        when: (answers) => answers.deploy
-      }
-    ]);
+    console.log(chalk.green(`\n📄 Deployed Contracts on ${options.network}:`));
     
-    if (answers.deploy) {
-      // Run deployment with provided parameters
-      const deployOptions = {
-        network: answers.network,
-        vrfSubscriptionId: answers.vrfSubscriptionId,
-        functionsSubscriptionId: answers.functionsSubscriptionId
-      };
-      
-      // Execute deployment
-      console.log(chalk.blue('\nStarting deployment...'));
-      // ... deployment logic would go here
+    if (!deployedContracts[options.network]) {
+      console.log(chalk.yellow('No contracts deployed on this network.'));
+      return;
+    }
+    
+    const contracts = deployedContracts[options.network];
+    
+    if (contracts.groth16Verifier) {
+      console.log(chalk.blue(`Groth16 Verifier: ${contracts.groth16Verifier}`));
+    }
+    if (contracts.zkProofAggregator) {
+      console.log(chalk.blue(`ZK Proof Aggregator: ${contracts.zkProofAggregator}`));
+    }
+    if (contracts.crossChainVerifier) {
+      console.log(chalk.blue(`Cross Chain Verifier: ${contracts.crossChainVerifier}`));
+    }
+    
+    if (contracts.deployedAt) {
+      console.log(chalk.blue(`Deployed At: ${contracts.deployedAt}`));
+    }
+    if (contracts.deployer) {
+      console.log(chalk.blue(`Deployer: ${contracts.deployer}`));
     }
   });
 
-// Helper function to get deployment parameters
+// Get deployment configuration
 async function getDeploymentParams(options, network) {
-  // Default parameters for testnet deployment
-  const defaultParams = {
-    vrfCoordinator: network.vrfCoordinator,
-    functionsRouter: network.functionsRouter,
-    vrfSubscriptionId: options.vrfSubscriptionId || '1',
-    keyHash: '0x354d2f95da55398f44b7cff77da56283d9c6c829a4bdf1bbcaf2ad6a4d081f61', // Default key hash
-    functionsSubscriptionId: options.functionsSubscriptionId || '1',
-    functionsDonId: '0x66756e2d6176616c616e6368652d66756a692d31000000000000000000000000' // fun-avalanche-fuji-1
+  return {
+    vrfCoordinator: network.vrfCoordinator || '0x5FbDB2315678afecb367f032d93F642f64180aa3',
+    functionsRouter: network.functionsRouter || '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
+    vrfSubscriptionId: options.vrfSubscriptionId || 1,
+    keyHash: '0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c',
+    functionsSubscriptionId: options.functionsSubscriptionId || 1,
+    functionsDonId: '0x66756e2d657468657265756d2d73657075616e2d310000000000000000000000'
   };
-  
-  return defaultParams;
 }
 
-// Initialize CLI
+// Configure program
 program
   .name('lightlink')
-  .description('LightLink ZK Oracle CLI Tool')
+  .description('LightLink ZK Oracle CLI')
   .version('1.0.0');
-
-// Load existing deployments
-loadDeployedContracts();
 
 program.parse(); 

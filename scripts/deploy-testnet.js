@@ -82,14 +82,14 @@ async function main() {
   try {
     // Step 1: Deploy Groth16 Verifier
     console.log("📝 Step 1: Deploying Groth16 Verifier...");
-    const Groth16Verifier = await ethers.getContractFactory("Groth16Verifier");
-    const groth16Verifier = await Groth16Verifier.deploy();
-    await groth16Verifier.waitForDeployment();
+      const Groth16Verifier = await ethers.getContractFactory("contracts/Groth16Verifier.sol:Groth16Verifier");
+  const groth16Verifier = await Groth16Verifier.deploy();
+  await groth16Verifier.waitForDeployment();
     const groth16Address = await groth16Verifier.getAddress();
     
     deployedContracts.groth16Verifier = {
       address: groth16Address,
-      contract: "Groth16Verifier"
+      contract: "contracts/Groth16Verifier.sol:Groth16Verifier"
     };
     
     console.log(`✅ Groth16 Verifier deployed: ${groth16Address}\n`);

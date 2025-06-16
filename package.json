@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Decentralized Light-Client via ZK Proof Aggregation for Chromion Hackathon 2025",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "test": "hardhat test",
     "compile": "hardhat compile",

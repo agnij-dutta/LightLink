@@ -156,7 +156,7 @@ async function deployMockContracts() {
 async function deployGroth16Verifier() {
   console.log("📦 Deploying Groth16 Verifier...");
   
-  const Groth16Verifier = await ethers.getContractFactory("Groth16Verifier");
+  const Groth16Verifier = await ethers.getContractFactory("contracts/Groth16Verifier.sol:Groth16Verifier");
   const verifier = await deployWithRetry(Groth16Verifier, []);
   console.log(`✅ Groth16Verifier deployed: ${verifier.address}`);
   
@@ -308,7 +308,7 @@ async function deployContracts() {
   }
   
   // Deploy Groth16 Verifier
-  const Groth16Verifier = await ethers.getContractFactory("Groth16Verifier");
+  const Groth16Verifier = await ethers.getContractFactory("contracts/Groth16Verifier.sol:Groth16Verifier");
   contracts.groth16Verifier = await Groth16Verifier.deploy();
   await contracts.groth16Verifier.waitForDeployment();
   console.log(`✅ Groth16Verifier deployed: ${await contracts.groth16Verifier.getAddress()}`);
@@ -321,7 +321,8 @@ async function deployContracts() {
     config?.subscriptionId || 1, // vrfSubscriptionId
     config?.keyHash || "0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c", // vrfKeyHash
     config?.functionsSubscriptionId || 1, // functionsSubscriptionId
-    config?.functionsDonId || "0x66756e2d657468657265756d2d73657075616e2d310000000000000000000000" // functionsDonId
+    config?.functionsDonId || "0x66756e2d657468657265756d2d73657075616e2d310000000000000000000000", // functionsDonId
+    await contracts.groth16Verifier.getAddress() // groth16VerifierAddress
   );
   await contracts.zkProofAggregator.waitForDeployment();
   console.log(`✅ ZKProofAggregator deployed: ${await contracts.zkProofAggregator.getAddress()}`);

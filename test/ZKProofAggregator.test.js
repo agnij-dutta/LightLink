@@ -24,7 +24,7 @@ describe("ZKProofAggregator", function () {
     await mockAutomationRegistry.waitForDeployment();
 
     // Deploy ZK Verifier
-    const Groth16Verifier = await ethers.getContractFactory("Groth16Verifier");
+    const Groth16Verifier = await ethers.getContractFactory("contracts/Groth16Verifier.sol:Groth16Verifier");
     const groth16Verifier = await Groth16Verifier.deploy();
     await groth16Verifier.waitForDeployment();
 
@@ -36,7 +36,8 @@ describe("ZKProofAggregator", function () {
       1, // vrfSubscriptionId
       "0x474e34a077df58807dbe9c96d3c009b23b3c6d0cce433e59bbf5b34f823bc56c", // vrfKeyHash
       1, // functionsSubscriptionId
-      "0x66756e2d657468657265756d2d73657075616e2d310000000000000000000000" // functionsDonId
+      "0x66756e2d657468657265756d2d73657075616e2d310000000000000000000000", // functionsDonId
+      await groth16Verifier.getAddress() // groth16VerifierAddress
     );
     await zkProofAggregator.waitForDeployment();
 

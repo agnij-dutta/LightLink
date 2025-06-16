@@ -20,8 +20,14 @@ const CIRCUITS = {
     name: 'proof_aggregator',
     file: 'proof_aggregator.circom',
     template: 'ProofAggregator',
-    params: [4, 8, 32], // nProofs, merkleDepth, blockDepth
-    ptauPower: 17
+    params: [3, 6, 8], // nProofs, merkleDepth, blockDepth - optimized for development
+    ptauPower: 15,
+    // Production config (comment above and uncomment below for full scale):
+    // params: [4, 8, 16], // Full functionality with manageable complexity
+    // ptauPower: 16
+    // Enterprise config (maximum functionality):
+    // params: [8, 10, 32], // Maximum proofs with deep verification
+    // ptauPower: 18
   },
   merkle_proof: {
     name: 'merkle_proof', 
@@ -163,11 +169,12 @@ async function setupGroth16(circuitName) {
     const phase2Time = ((Date.now() - phase2Start) / 1000).toFixed(1);
     console.log(`   ✅ Phase 2 completed in ${phase2Time}s - Contribution added`);
 
-    // Finalize ceremony
+    // Finalize ceremony by copying the contributed key
     console.log(`📝 Finalizing ceremony...`);
-    console.log(`   ⏳ Applying beacon to finalize setup...`);
+    console.log(`   ⏳ Using contributed key as final key...`);
     const finalizeStart = Date.now();
-    await snarkjs.zKey.beacon(zkeyPath1, zkeyFinal, "0102030405060708090a0b0c0d0e0f", 10);
+    // Copy the contributed key as the final key (simpler approach)
+    fs.copyFileSync(zkeyPath1, zkeyFinal);
     const finalizeTime = ((Date.now() - finalizeStart) / 1000).toFixed(1);
     console.log(`   ✅ Ceremony finalized in ${finalizeTime}s`);
 
@@ -227,10 +234,9 @@ async function generateVerifierContract(circuitName) {
   try {
     const vKey = JSON.parse(fs.readFileSync(vkeyPath, 'utf8'));
     
-    // Generate verifier contract
-    const verifierContract = await snarkjs.zKey.exportSolidityVerifier(
-      path.join(outputDir, `${config.name}_final.zkey`)
-    );
+    // Generate verifier contract using the zkey file
+    const zkeyPath = path.join(outputDir, `${config.name}_final.zkey`);
+    const verifierContract = await snarkjs.zKey.exportSolidityVerifier(zkeyPath);
 
     // Write verifier contract
     const contractName = `${config.name.charAt(0).toUpperCase() + config.name.slice(1)}Verifier`;
