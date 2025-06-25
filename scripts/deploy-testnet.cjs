@@ -38,6 +38,7 @@ async function main() {
   console.log("🚀 Starting LightLink ZK Oracle deployment...\n");
   
   // Get deployment parameters
+  const hre = require("hardhat");
   const networkName = hre.network.name;
   const config = NETWORK_CONFIG[networkName];
   
@@ -124,6 +125,27 @@ async function main() {
     };
     
     console.log(`✅ ZK Proof Aggregator deployed: ${zkAggregatorAddress}\n`);
+    
+    // Step 2.5: Load and configure Chainlink Functions source
+    console.log("📝 Step 2.5: Configuring Chainlink Functions source...");
+    try {
+      const functionsSourcePath = path.join(__dirname, "functions/zkProofGeneration.js");
+      const functionsSource = fs.readFileSync(functionsSourcePath, "utf8");
+      
+      // Set the Functions source in the contract
+      const setSourceTx = await zkProofAggregator.setFunctionsSource(functionsSource);
+      await setSourceTx.wait();
+      console.log("✅ Chainlink Functions source configured");
+      
+      // Configure ZK Proof Service URL (default to localhost for development)
+      const proofServiceUrl = process.env.ZK_PROOF_SERVICE_URL || "http://localhost:3001/prove";
+      const setUrlTx = await zkProofAggregator.setProofServiceUrl(proofServiceUrl);
+      await setUrlTx.wait();
+      console.log(`✅ ZK Proof Service URL configured: ${proofServiceUrl}\n`);
+    } catch (error) {
+      console.warn("⚠️  Warning: Could not load Functions source:", error.message);
+      console.log("You may need to set the Functions source manually later\n");
+    }
     
     // Step 3: Deploy Cross Chain Verifier
     console.log("📝 Step 3: Deploying Cross Chain Verifier...");

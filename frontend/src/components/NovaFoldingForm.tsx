@@ -1,15 +1,35 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/Card';
 import { Button } from './ui/Button';
-import { GitBranch, Play } from 'lucide-react';
-import { useAccount, useContractRead, useContractReads } from 'wagmi';
+import { GitBranch, Play, Loader2 } from 'lucide-react';
+import { useAccount, useContractRead, useContractReads, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { CONTRACT_ADDRESSES, ZK_PROOF_AGGREGATOR_ABI } from '@/constants/contracts';
+import { useZKProofService } from '@/hooks/useZKProofService';
 
 export function NovaFoldingForm() {
   const { address } = useAccount();
   const [selectedProofIds, setSelectedProofIds] = useState<number[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [serviceStatus, setServiceStatus] = useState<string>('unknown');
+
+  const { writeContract, data: hash, error, isPending } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = 
+    useWaitForTransactionReceipt({
+      hash,
+    });
+
+  const { checkServiceHealth } = useZKProofService();
+
+  // Check ZK proof service status on component mount
+  useEffect(() => {
+    const checkStatus = async () => {
+      const status = await checkServiceHealth();
+      setServiceStatus(status?.status || 'offline');
+    };
+    checkStatus();
+  }, [checkServiceHealth]);
 
   // Fetch the total number of proof requests
   const { data: requestCounter } = useContractRead({
@@ -20,7 +40,7 @@ export function NovaFoldingForm() {
 
   // Fetch all proof requests for the user
   const proofRequestIds = requestCounter ? Array.from({ length: Number(requestCounter) }, (_, i) => BigInt(i)) : [];
-  const { data: proofRequests } = useContractReads({
+  const { data: proofRequests, refetch: refetchProofs } = useContractReads({
     contracts: proofRequestIds.map((id) => ({
       address: CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR,
       abi: ZK_PROOF_AGGREGATOR_ABI,
@@ -35,10 +55,23 @@ export function NovaFoldingForm() {
     completedProofs = proofRequests
       .map((result, idx) => {
         if (!result || !result.result) return null;
-        const result_array = result.result as unknown as [string, bigint, string, bigint, string, boolean, boolean];
-        const [requester, timestamp, sourceChain, blockNumber, stateRoot, isCompleted, isValid] = result_array;
+        
+        // Fix: Ensure result.result is properly handled as an object with properties
+        const proofData = result.result;
+        if (!proofData || typeof proofData !== 'object') return null;
+        
+        // Access properties directly from the object instead of destructuring as array
+        const requester = proofData[0] as string;
+        const timestamp = proofData[1];
+        const sourceChain = proofData[2];
+        const blockNumber = proofData[3];
+        const stateRoot = proofData[4];
+        const isCompleted = proofData[5];
+        const isValid = proofData[6];
+        
         if (typeof requester !== 'string' || requester.toLowerCase() !== address.toLowerCase()) return null;
         if (!isCompleted || !isValid) return null;
+        
         return {
           id: idx,
           sourceChain: String(sourceChain),
@@ -56,13 +89,46 @@ export function NovaFoldingForm() {
     );
   };
 
+  const startNovaFolding = async () => {
+    if (selectedProofIds.length === 0) return;
+    
+    setIsSubmitting(true);
+    try {
+      await writeContract({
+        address: CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR,
+        abi: ZK_PROOF_AGGREGATOR_ABI,
+        functionName: 'startNovaFolding',
+        args: [selectedProofIds.map(id => BigInt(id))],
+      });
+      
+      // Reset selection after successful submission
+      if (isConfirmed) {
+        setSelectedProofIds([]);
+        refetchProofs();
+      }
+    } catch (error) {
+      console.error('Error starting Nova folding:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <Card className="max-w-2xl mx-auto">
       <CardHeader>
+        <div className="flex items-center justify-between">
         <CardTitle className="flex items-center space-x-2">
           <GitBranch className="w-5 h-5 text-purple-500" />
           <span>Nova Recursive Proof Folding</span>
         </CardTitle>
+          <div className="text-xs font-mono">
+            Service: 
+            <span className={
+              serviceStatus === 'running' ? 'text-green-500' : 
+              serviceStatus === 'offline' ? 'text-red-500' : 'text-yellow-500'
+            }> {serviceStatus}</span>
+          </div>
+        </div>
         <CardDescription>
           Aggregate multiple ZK proofs using Nova's folding scheme for exponential scalability.
         </CardDescription>
@@ -107,10 +173,35 @@ export function NovaFoldingForm() {
                   ))}
                 </ul>
               </div>
-              <Button disabled={selectedProofIds.length === 0} className="w-full">
+              <Button 
+                disabled={selectedProofIds.length === 0 || isSubmitting || isPending || isConfirming} 
+                className="w-full"
+                onClick={startNovaFolding}
+              >
+                {isSubmitting || isPending || isConfirming ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {isPending || isSubmitting ? 'Processing...' : 'Confirming...'}
+                  </>
+                ) : (
+                  <>
                 <Play className="w-4 h-4 mr-2" />
                 Start Nova Folding
+                  </>
+                )}
               </Button>
+              
+              {error && (
+                <div className="text-red-500 text-sm mt-2">
+                  Error: {error.message || 'Failed to start Nova folding'}
+                </div>
+              )}
+              
+              {isConfirmed && (
+                <div className="text-green-500 text-sm mt-2">
+                  Nova folding started successfully!
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -77,6 +77,7 @@ module.exports = {
       baseSepolia: vars.get("BASESCAN_API_KEY", ""),
       polygonAmoy: vars.get("POLYGONSCAN_API_KEY", ""),
       avalancheFuji: vars.get("SNOWTRACE_API_KEY", ""),
+      avalancheFujiTestnet: vars.get("SNOWTRACE_API_KEY", "")
     },
     customChains: [
       {

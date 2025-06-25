@@ -23,10 +23,14 @@
     "dev": "hardhat node & npm run deploy",
     "clean": "hardhat clean && rm -rf artifacts/circuits",
     "cli": "node cli/lightlink.js",
-    "deploy-testnet": "node scripts/deploy-testnet.js",
+    "deploy-testnet": "node scripts/deploy-testnet.cjs",
     "quick-deploy": "node scripts/quick-deploy.js",
     "test-deployment": "node scripts/test-deployment.js",
-    "verify-contracts": "node scripts/verify-contracts.js"
+    "verify-contracts": "node scripts/verify-contracts.js",
+    "setup-zk": "node scripts/setup-zk-proofs.js",
+    "setup-zk:full": "node scripts/setup-zk-proofs.js --start-service",
+    "zk-service": "node scripts/zk-proof-service.js",
+    "test:zk": "node scripts/setup-zk-proofs.js --skip-tests"
   },
   "keywords": [
     "chainlink",
@@ -68,7 +72,9 @@
     "axios": "^1.6.0",
     "chalk": "^5.3.0",
     "commander": "^11.1.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.3.1",
+    "express": "^4.18.2",
     "ffjavascript": "^0.2.63",
     "inquirer": "^9.2.12",
     "ora": "^7.0.1"

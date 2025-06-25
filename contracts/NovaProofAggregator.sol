@@ -16,7 +16,6 @@ contract NovaProofAggregator is ZKProofAggregator {
     event NovaFoldingStarted(uint256 indexed batchId, uint256[] proofIds, address indexed requester);
     event NovaFoldingCompleted(uint256 indexed batchId, bytes32 aggregatedHash, bool isValid);
     event RecursiveProofGenerated(uint256 indexed batchId, uint256 recursionDepth, bytes recursiveProof);
-    event FunctionsRequestError(bytes32 indexed requestId, bytes err);
     
     // Structs for Nova
     struct NovaInstance {
@@ -263,7 +262,7 @@ contract NovaProofAggregator is ZKProofAggregator {
         bytes memory err
     ) internal {
         if (err.length > 0) {
-            emit FunctionsRequestError(bytes32(batchId), err);
+            emit FunctionsRequestError(bytes32(batchId), err); // Using parent contract's event
             return;
         }
         

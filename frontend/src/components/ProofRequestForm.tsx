@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/Card';
 import { Button } from './ui/Button';
@@ -14,9 +14,12 @@ import {
   CheckCircle, 
   AlertTriangle,
   ExternalLink,
-  Hash
+  Hash,
+  Eye,
+  RefreshCw
 } from 'lucide-react';
 import { CONTRACT_ADDRESSES, ZK_PROOF_AGGREGATOR_ABI } from '@/constants/contracts';
+import { useZKProofService } from '@/hooks/useZKProofService';
 import type { ProofRequestFormData } from '@/types';
 
 export function ProofRequestForm() {
@@ -28,13 +31,27 @@ export function ProofRequestForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastTxHash, setLastTxHash] = useState<string>('');
   const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [previewProof, setPreviewProof] = useState<any>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const { writeContract, data: hash, error, isPending } = useWriteContract();
-
   const { isLoading: isConfirming, isSuccess: isConfirmed } = 
     useWaitForTransactionReceipt({
       hash,
     });
+  
+  const { 
+    generateMockProof, 
+    isLoading: isProofServiceLoading,
+    error: proofServiceError,
+    checkServiceHealth,
+    serviceStatus
+  } = useZKProofService();
+
+  // Check ZK proof service status on component mount
+  useEffect(() => {
+    checkServiceHealth();
+  }, [checkServiceHealth]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,12 +83,15 @@ export function ProofRequestForm() {
       ...prev,
       [field]: value,
     }));
+    // Clear preview when inputs change
+    setPreviewProof(null);
   };
 
   const resetForm = () => {
     setFormData({ sourceChain: '', blockNumber: '' });
     setLastTxHash('');
     setRequestSubmitted(false);
+    setPreviewProof(null);
   };
 
   const openTransaction = (txHash: string) => {
@@ -79,15 +99,55 @@ export function ProofRequestForm() {
     window.open(`${explorerUrl}/tx/${txHash}`, '_blank');
   };
 
+  // Generate a preview of the ZK proof
+  const generateProofPreview = async () => {
+    if (!formData.sourceChain || !formData.blockNumber) return;
+    
+    setIsPreviewLoading(true);
+    try {
+      // Map chain name to chain ID
+      const chainIdMap: Record<string, number> = {
+        'ethereum': 1,
+        'polygon': 137,
+        'arbitrum': 42161,
+        'optimism': 10,
+        'base': 8453,
+        'sepolia': 11155111,
+        'avalanche': 43114
+      };
+      
+      const chainId = chainIdMap[formData.sourceChain] || 1;
+      const blockNumber = parseInt(formData.blockNumber);
+      const targetChainId = 43113; // Avalanche Fuji
+      
+      const result = await generateMockProof(blockNumber, chainId, targetChainId);
+      setPreviewProof(result);
+    } catch (error) {
+      console.error('Error generating proof preview:', error);
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
   const isFormValid = formData.sourceChain && formData.blockNumber && parseInt(formData.blockNumber) > 0;
 
   return (
     <Card className="glass border-border/50">
       <CardHeader>
+        <div className="flex items-center justify-between">
         <CardTitle className="flex items-center space-x-2">
           <Network className="w-5 h-5 text-primary" />
           <span>Request ZK Proof</span>
         </CardTitle>
+          {serviceStatus && (
+            <Badge 
+              variant={serviceStatus.status === 'running' ? 'outline' : 'destructive'} 
+              className="text-xs"
+            >
+              {serviceStatus.status === 'running' ? 'Service Online' : 'Service Offline'}
+            </Badge>
+          )}
+        </div>
         <CardDescription>
           Submit a request for zero-knowledge proof generation using Chainlink oracles
         </CardDescription>
@@ -138,6 +198,65 @@ export function ProofRequestForm() {
               Specify the block number to generate proof for
             </p>
           </div>
+
+          {/* Preview Button */}
+          {isFormValid && !previewProof && !requestSubmitted && (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={generateProofPreview}
+                disabled={isPreviewLoading || isProofServiceLoading}
+                className="text-xs"
+              >
+                {isPreviewLoading ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <Eye className="w-3 h-3 mr-1" />
+                )}
+                Preview Proof
+              </Button>
+            </div>
+          )}
+
+          {/* Proof Preview */}
+          {previewProof && (
+            <div className="space-y-3 p-4 rounded-lg bg-primary/5 border border-primary/20">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-primary">Proof Preview</h4>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={generateProofPreview}
+                  className="h-6 w-6 p-0"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </Button>
+              </div>
+              <div className="text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Proof Type:</span>
+                  <span className="font-mono">{previewProof.metadata?.circuit || 'Groth16'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Valid:</span>
+                  <span className={`font-mono ${previewProof.isValid ? 'text-green-500' : 'text-red-500'}`}>
+                    {previewProof.isValid ? 'Yes' : 'No'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Generation Time:</span>
+                  <span className="font-mono">{previewProof.metadata?.generationTime || 0} ms</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Mock:</span>
+                  <span className="font-mono">{previewProof.metadata?.isMock ? 'Yes' : 'No'}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Status Display */}
           {(isSubmitting || isPending || isConfirming || isConfirmed || error) && (

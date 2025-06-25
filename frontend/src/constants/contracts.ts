@@ -5,6 +5,13 @@ export const CONTRACT_ADDRESSES = {
   NOVA_PROOF_AGGREGATOR: process.env.NEXT_PUBLIC_NOVA_PROOF_AGGREGATOR_ADDRESS as `0x${string}`,
 } as const;
 
+// ZK Proof Service Configuration
+export const ZK_PROOF_SERVICE = {
+  URL: process.env.NEXT_PUBLIC_ZK_PROOF_SERVICE_URL || '/api/zk-proof',
+  HEALTH_ENDPOINT: '/api/zk-proof',
+  DEFAULT_MERKLE_DEPTH: 8,
+} as const;
+
 export const ZK_PROOF_AGGREGATOR_ABI = [
   // Regular proof functions
   {

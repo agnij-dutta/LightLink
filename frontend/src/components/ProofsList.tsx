@@ -67,8 +67,20 @@ export function ProofsList() {
     const userProofs: ProofRequestDisplay[] = proofRequests
       .map((result, idx) => {
         if (!result?.result) return null;
-        const result_array = result.result as unknown as [string, bigint, string, bigint, string, boolean, boolean];
-        const [requester, timestamp, sourceChain, blockNumber, stateRoot, isCompleted, isValid] = result_array;
+        
+        const proofData = result.result;
+        if (!proofData || typeof proofData !== 'object') return null;
+        
+        // Access properties directly from the object instead of destructuring as array
+        const requester = proofData[0] as string;
+        const timestamp = proofData[1];
+        const sourceChain = proofData[2];
+        const blockNumber = proofData[3];
+        const stateRoot = proofData[4];
+        const isCompleted = proofData[5];
+        const isValid = proofData[6];
+        
+        if (!requester || !address) return null;
         if (requester.toLowerCase() !== address.toLowerCase()) return null;
         return {
           id: idx.toString(),
