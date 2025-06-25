@@ -117,7 +117,7 @@ export function useZKProofService() {
       circuit: 'proof_aggregator',
       inputs: [mockInput],
       params: {
-        nProofs: 1,
+        nProofs: 3,
         merkleDepth: ZK_PROOF_SERVICE.DEFAULT_MERKLE_DEPTH,
         blockDepth: 8
       }

@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
-import snarkjs from 'snarkjs';
+import * as snarkjs from 'snarkjs';
 import { fileURLToPath } from 'url';
 
 // Get current file directory (ES modules equivalent of __dirname)
@@ -72,7 +72,7 @@ function stringToField(str) {
 // Convert circuit inputs from Chainlink Functions format to circuit format
 function formatInputsForCircuit(circuitInputs, circuitName, params) {
   if (circuitName === 'proof_aggregator') {
-    const [nProofs, merkleDepth, blockDepth] = params;
+    const { nProofs, merkleDepth, blockDepth } = params;
     
     // Pad inputs to match circuit requirements
     const paddedInputs = [...circuitInputs];

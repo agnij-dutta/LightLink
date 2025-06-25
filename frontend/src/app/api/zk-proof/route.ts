@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Call the real backend proof service
-    const backendUrl = process.env.ZK_PROOF_SERVICE_URL || 'http://localhost:3001/api/zk-proof';
+    const backendUrl = process.env.ZK_PROOF_SERVICE_URL || 'http://localhost:3001/prove';
     const backendRes = await fetch(backendUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

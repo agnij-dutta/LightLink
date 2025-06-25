@@ -12,7 +12,7 @@ const proofServiceUrl = args[4] || "http://localhost:3001/prove"; // External pr
 // Configuration for different chains with proper API endpoints
 const CHAIN_CONFIGS = {
   1: { // Ethereum Mainnet
-    rpcUrl: "https://ethereum-rpc.publicnode.com",
+    rpcUrl: "https://endpoints.omniatech.io/v1/eth/mainnet/public",
     blockTime: 12,
     confirmations: 6
   },
@@ -32,7 +32,7 @@ const CHAIN_CONFIGS = {
     confirmations: 1
   },
   137: { // Polygon
-    rpcUrl: "https://polygon-bor-rpc.publicnode.com",
+    rpcUrl: "https://polygon.drpc.org",
     blockTime: 2,
     confirmations: 20
   },
@@ -83,6 +83,12 @@ async function fetchBlockData(chainId, blockNumber) {
     },
     data: requestData,
   });
+
+  console.log('RPC response:', JSON.stringify(response));
+  if (response && response.data) {
+    console.log('response.data:', JSON.stringify(response.data));
+    console.log('response.data.result:', JSON.stringify(response.data.result));
+  }
 
   if (response.error) {
     throw new Error(`RPC Error: ${JSON.stringify(response.error)}`);
