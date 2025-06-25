@@ -10,30 +10,23 @@ import { fileURLToPath } from 'url';
 // Get current file directory (ES modules equivalent of __dirname)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // Configuration
-const PORT = process.env.PORT || 3001;
-const CIRCUITS_DIR = path.join(__dirname, '../artifacts/circuits');
+const PORT = process.env.PORT || 10000;
+const CIRCUITS_DIR = path.join(PROJECT_ROOT, 'artifacts/circuits');
 
 // Circuit configurations (matching circuit-tools.cjs)
 const CIRCUITS = {
   proof_aggregator: {
     name: 'proof_aggregator',
-    wasmPath: path.join(CIRCUITS_DIR, 'proof_aggregator/proof_aggregator_js/proof_aggregator.wasm'),
-    zkeyPath: path.join(CIRCUITS_DIR, 'proof_aggregator/proof_aggregator_final.zkey'),
-    vkeyPath: path.join(CIRCUITS_DIR, 'proof_aggregator/verification_key.json'),
+    wasmPath: path.resolve(PROJECT_ROOT, 'artifacts/circuits/proof_aggregator_js/proof_aggregator.wasm'),
+    zkeyPath: path.resolve(PROJECT_ROOT, 'artifacts/circuits/proof_aggregator/proof_aggregator_final.zkey'),
     params: [3, 6, 8] // nProofs, merkleDepth, blockDepth
-  },
-  merkle_proof: {
-    name: 'merkle_proof',
-    wasmPath: path.join(CIRCUITS_DIR, 'merkle_proof/merkle_proof_js/merkle_proof.wasm'),
-    zkeyPath: path.join(CIRCUITS_DIR, 'merkle_proof/merkle_proof_final.zkey'),
-    vkeyPath: path.join(CIRCUITS_DIR, 'merkle_proof/verification_key.json'),
-    params: [8] // depth
   }
 };
 
@@ -42,9 +35,17 @@ function isCircuitReady(circuitName) {
   const circuit = CIRCUITS[circuitName];
   if (!circuit) return false;
   
-  return fs.existsSync(circuit.wasmPath) && 
-         fs.existsSync(circuit.zkeyPath) && 
-         fs.existsSync(circuit.vkeyPath);
+  // Only check for wasm and zkey files
+  const exists = fs.existsSync(circuit.wasmPath) && fs.existsSync(circuit.zkeyPath);
+  console.log(`Checking circuit ${circuitName}:`, {
+    wasmPath: circuit.wasmPath,
+    wasmExists: fs.existsSync(circuit.wasmPath),
+    zkeyPath: circuit.zkeyPath,
+    zkeyExists: fs.existsSync(circuit.zkeyPath),
+    cwd: process.cwd(),
+    projectRoot: PROJECT_ROOT
+  });
+  return exists;
 }
 
 // Helper function to convert hex string to BigInt for circuits
@@ -200,22 +201,28 @@ async function generateProof(circuitName, circuitInputs, params) {
 // Health check endpoint
 app.get('/health', (req, res) => {
   const circuitStatus = {};
+  let allReady = true;
   
+  // Check each circuit
   for (const [name, circuit] of Object.entries(CIRCUITS)) {
     const ready = isCircuitReady(name);
     circuitStatus[name] = {
       ready,
       wasmExists: fs.existsSync(circuit.wasmPath),
       zkeyExists: fs.existsSync(circuit.zkeyPath),
-      vkeyExists: fs.existsSync(circuit.vkeyPath)
+      paths: {
+        wasm: circuit.wasmPath,
+        zkey: circuit.zkeyPath
+      }
     };
+    if (!ready) allReady = false;
   }
   
   res.json({
-    status: 'running',
-    environment: 'render',
+    status: allReady ? 'ready' : 'not_ready',
+    message: allReady ? 'Service is ready' : 'Some circuits are not ready',
     circuits: circuitStatus,
-    timestamp: new Date().toISOString()
+    serverTime: new Date().toISOString()
   });
 });
 
@@ -273,22 +280,19 @@ app.post('/prove', async (req, res) => {
 
 // Start the server
 app.listen(PORT, () => {
-  console.log(`🔐 ZK Proof Service running on port ${PORT}`);
+  console.log(`\n🔐 ZK Proof Service running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🛠️  Setup guide: http://localhost:${PORT}/setup`);
-  console.log();
+  console.log(`🛠️  Setup guide: http://localhost:${PORT}/setup\n`);
   
-  // Print circuit status
   console.log('📋 Circuit Status:');
-  for (const [name, _] of Object.entries(CIRCUITS)) {
+  for (const [name, circuit] of Object.entries(CIRCUITS)) {
     const ready = isCircuitReady(name);
     console.log(`   ${ready ? '✅' : '❌'} ${name}: ${ready ? 'Ready' : 'Not ready'}`);
+    if (!ready) {
+      console.log('   Files checked:');
+      console.log(`   - WASM: ${circuit.wasmPath} (${fs.existsSync(circuit.wasmPath) ? 'exists' : 'missing'})`);
+      console.log(`   - ZKEY: ${circuit.zkeyPath} (${fs.existsSync(circuit.zkeyPath) ? 'exists' : 'missing'})`);
+    }
   }
-  console.log();
-  
-  if (Object.values(CIRCUITS).every(c => isCircuitReady(c.name))) {
-    console.log('🚀 Service ready to generate real ZK proofs!');
-  } else {
-    console.log('⚠️  Some circuits are not ready. Run setup-groth16 to generate missing artifacts.');
-  }
+  console.log('\n🚀 Service ready to generate real ZK proofs!');
 }); 
