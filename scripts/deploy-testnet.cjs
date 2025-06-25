@@ -137,11 +137,11 @@ async function main() {
       await setSourceTx.wait();
       console.log("✅ Chainlink Functions source configured");
       
-      // Configure ZK Proof Service URL (default to localhost for development)
-      const proofServiceUrl = process.env.ZK_PROOF_SERVICE_URL || "http://localhost:3001/prove";
-      const setUrlTx = await zkProofAggregator.setProofServiceUrl(proofServiceUrl);
-      await setUrlTx.wait();
-      console.log(`✅ ZK Proof Service URL configured: ${proofServiceUrl}\n`);
+        // Configure ZK Proof Service URL (default to Render.com service for production)
+  const proofServiceUrl = process.env.ZK_PROOF_SERVICE_URL || "https://lightlink.onrender.com/prove";
+  const setUrlTx = await zkProofAggregator.setProofServiceUrl(proofServiceUrl);
+  await setUrlTx.wait();
+  console.log(`✅ ZK Proof Service URL configured: ${proofServiceUrl}\n`);
     } catch (error) {
       console.warn("⚠️  Warning: Could not load Functions source:", error.message);
       console.log("You may need to set the Functions source manually later\n");

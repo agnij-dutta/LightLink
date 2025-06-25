@@ -1,7 +1,26 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+// SPDX-License-Identifier: GPL-3.0
+/*
+    Copyright 2021 0KIMS association.
 
-contract ProofAggregatorVerifier {
+    This file is generated with [snarkJS](https://github.com/iden3/snarkjs).
+
+    snarkJS is a free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    snarkJS is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+    or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public
+    License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with snarkJS. If not, see <https://www.gnu.org/licenses/>.
+*/
+
+pragma solidity >=0.7.0 <0.9.0;
+
+contract Groth16Verifier {
     // Scalar field size
     uint256 constant r    = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
     // Base field size
@@ -18,10 +37,10 @@ contract ProofAggregatorVerifier {
     uint256 constant gammax2 = 10857046999023057135944570762232829481370756359578518086990519993285655852781;
     uint256 constant gammay1 = 4082367875863433681332203403145435568316851327593401208105741076214120093531;
     uint256 constant gammay2 = 8495653923123431417604973247489272438418190587263600148770280649306958101930;
-    uint256 constant deltax1 = 8078417629219576557276792551917785625151119953974106239016539938935296664416;
-    uint256 constant deltax2 = 1766527602244272883637464827662899822290238925221144511285449291834931829355;
-    uint256 constant deltay1 = 14562227929185251072719567674918122569359099095453902965775592818350606131619;
-    uint256 constant deltay2 = 6392849046998297789075599163603179714002744512773328460617497091441916036306;
+    uint256 constant deltax1 = 12505958266378938912160217880536361281389623174615669366054833742104351134006;
+    uint256 constant deltax2 = 9994714196297513498418043263371301003769769164562746376416321184690738899315;
+    uint256 constant deltay1 = 640032346200592082704136230079027618102922598789576221862267771423010489717;
+    uint256 constant deltay2 = 10918603877909191207106306851249585526950608130741624390175676321304004274555;
 
     
     uint256 constant IC0x = 8240428306876470164134135617562246284779944529640642968573711968935029793986;

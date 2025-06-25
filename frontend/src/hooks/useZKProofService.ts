@@ -70,7 +70,7 @@ export function useZKProofService() {
     setError(null);
     
     try {
-      const response = await fetch(ZK_PROOF_SERVICE.URL, {
+      const response = await fetch(ZK_PROOF_SERVICE.URL || '', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

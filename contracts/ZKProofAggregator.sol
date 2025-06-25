@@ -496,11 +496,11 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
     }
 
     /**
-     * @dev Initialize the proof service URL with the default Vercel API endpoint
+     * @dev Initialize the proof service URL with the default Render ZK service endpoint
      */
     function initializeProofService() external onlyContractOwner {
-        // Set default proof service URL to our Vercel API endpoint
-        s_proofServiceUrl = "https://lightlink-app.vercel.app/api/zk-proof";
+        // Set default proof service URL to our Render ZK service endpoint
+        s_proofServiceUrl = "https://lightlink.onrender.com/prove";
     }
 
     /**

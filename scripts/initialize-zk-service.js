@@ -46,8 +46,8 @@ async function main() {
   const ZKProofAggregator = await ethers.getContractFactory('ZKProofAggregator');
   const zkProofAggregator = ZKProofAggregator.attach(zkProofAggregatorAddress);
   
-  // Set the proof service URL
-  const proofServiceUrl = 'https://lightlink-frontend.vercel.app/api/zk-proof';
+  // Set the proof service URL to the new Render.com service
+  const proofServiceUrl = 'https://lightlink.onrender.com/prove';
   console.log(`Setting proof service URL to: ${proofServiceUrl}`);
   
   try {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ZK_PROOF_SERVICE } from '@/constants/contracts';
 
 // Helper to determine if we should use mock data
 const USE_MOCK = process.env.MOCK_DATA === 'true';
@@ -51,25 +52,19 @@ function generateMockProof(circuitName: string, circuitInputs: any[]) {
 
 // Health check endpoint
 export async function GET(request: NextRequest) {
-  return NextResponse.json({
-    status: 'running',
-    environment: 'vercel',
-    circuits: {
-      proof_aggregator: {
-        ready: true,
-        wasmExists: true,
-        zkeyExists: true,
-        vkeyExists: true
-      },
-      merkle_proof: {
-        ready: true,
-        wasmExists: true,
-        zkeyExists: true,
-        vkeyExists: true
-      }
-    },
-    timestamp: new Date().toISOString()
-  });
+  try {
+    const response = await fetch(ZK_PROOF_SERVICE.HEALTH_ENDPOINT);
+    if (!response.ok) {
+      throw new Error(`Service health check failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error: any) {
+    return NextResponse.json({
+      error: `Health check failed: ${error.message}`
+    }, { status: 500 });
+  }
 }
 
 // Generate proof endpoint
@@ -91,26 +86,17 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    console.log(`Received proof request for ${circuit} with ${inputs.length} inputs`);
+    console.log(`Forwarding proof request for ${circuit} with ${inputs.length} inputs`);
     
-    // Use mock only if explicitly requested
-    if (USE_MOCK) {
-    const result = generateMockProof(circuit, inputs);
-    return NextResponse.json({
-      success: true,
-      ...result
-    });
-    }
-
-    // Call the real backend proof service
-    const backendUrl = process.env.ZK_PROOF_SERVICE_URL || 'http://localhost:3001/prove';
-    const backendRes = await fetch(backendUrl, {
+    // Forward the request to the real proof service
+    const response = await fetch(ZK_PROOF_SERVICE.URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ circuit, inputs, params })
     });
-    const backendData = await backendRes.json();
-    return NextResponse.json(backendData, { status: backendRes.status });
+    
+    const data = await response.json();
+    return NextResponse.json(data, { status: response.status });
   } catch (error: any) {
     console.error('Proof generation error:', error);
     return NextResponse.json({

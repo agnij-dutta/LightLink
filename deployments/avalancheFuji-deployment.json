@@ -5,15 +5,15 @@
     "explorer": "https://testnet.snowtrace.io"
   },
   "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449",
-  "deployedAt": "2025-06-25T11:13:40.601Z",
-  "blockNumber": 42426803,
+  "deployedAt": "2025-06-25T19:19:39.205Z",
+  "blockNumber": 42453529,
   "contracts": {
     "groth16Verifier": {
-      "address": "0xFcD03F66bdA44CBFc1a609116a8b7Af26eB7bf5e",
+      "address": "0x66Cb68D3baf144Ce1D03D1e5586906ab35106cac",
       "contract": "contracts/Groth16Verifier.sol:Groth16Verifier"
     },
     "zkProofAggregator": {
-      "address": "0xD889d1981C8D201f6e94805A50444a66c7d23de6",
+      "address": "0x2A00BF1b6dd3768f3b12A57CF49407e33E917F86",
       "contract": "ZKProofAggregator",
       "args": [
         "0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE",
@@ -22,16 +22,16 @@
         "0x354d2f95da55398f44b7cff77da56283d9c6c829a4bdf1bbcaf2ad6a4d081f61",
         "15604",
         "0x66756e2d6176616c616e6368652d66756a692d31000000000000000000000000",
-        "0xFcD03F66bdA44CBFc1a609116a8b7Af26eB7bf5e"
+        "0x66Cb68D3baf144Ce1D03D1e5586906ab35106cac"
       ]
     },
     "crossChainVerifier": {
-      "address": "0xEd49A60dF7c281bD15079858147F6da8ed7a9d7B",
+      "address": "0xe2f624ed1630cF9914CB9446B51711f1Fd912ef7",
       "contract": "CrossChainVerifier",
       "args": [
         "0xF694E193200268f9a4868e4Aa017A0118C9a8177",
         "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",
-        "0xD889d1981C8D201f6e94805A50444a66c7d23de6"
+        "0x2A00BF1b6dd3768f3b12A57CF49407e33E917F86"
       ]
     }
   },
