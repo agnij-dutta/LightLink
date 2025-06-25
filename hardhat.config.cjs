@@ -5,8 +5,8 @@ require("dotenv").config();
 
 const { vars } = require("hardhat/config");
 
-// Get the private key from environment variables
-const PRIVATE_KEY = vars.get("PRIVATE_KEY", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
+// Get the private key from environment variables (.env file takes precedence)
+const PRIVATE_KEY = process.env.PRIVATE_KEY || vars.get("PRIVATE_KEY", "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -17,6 +17,7 @@ module.exports = {
         enabled: true,
         runs: 200,
       },
+      viaIR: true,
     },
   },
   networks: {

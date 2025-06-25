@@ -1,0 +1,51 @@
+{
+  "name": "lightlink-frontend",
+  "version": "1.0.0",
+  "description": "LightLink ZK Oracle Frontend - Nova Recursive Proof Aggregation DApp",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "lightlink",
+    "zk",
+    "nova",
+    "recursive-proofs",
+    "avalanche",
+    "chainlink"
+  ],
+  "author": "LightLink Team",
+  "license": "MIT",
+  "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.8",
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
+    "@tanstack/react-query": "^5.28.0",
+    "autoprefixer": "^10.4.20",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.18.1",
+    "lucide-react": "^0.460.0",
+    "next": "^14.2.0",
+    "postcss": "^8.5.1",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "tailwind-merge": "^2.6.0",
+    "tailwindcss": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.6.0",
+    "viem": "^2.9.20",
+    "wagmi": "^2.5.19"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^14.2.0"
+  }
+}

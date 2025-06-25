@@ -59,9 +59,9 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
     uint32 private s_numWords = 1;
 
     // Chainlink Functions Configuration
-    uint64 private s_functionsSubscriptionId;
-    uint32 private s_functionsGasLimit = 300000;
-    bytes32 private s_functionsDonId;
+    uint64 internal s_functionsSubscriptionId;
+    uint32 internal s_functionsGasLimit = 300000;
+    bytes32 internal s_functionsDonId;
     
     // ZK Verification
     mapping(bytes32 => bool) public verifiedProofs;
@@ -73,9 +73,19 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
     
     // Access control
     mapping(address => bool) public authorizedCallers;
+    address private _owner;
 
     modifier onlyAuthorized() {
-        require(authorizedCallers[msg.sender] || msg.sender == owner(), "Not authorized");
+        require(authorizedCallers[msg.sender] || msg.sender == _owner, "Not authorized");
+        _;
+    }
+    
+    function contractOwner() public view returns (address) {
+        return _owner;
+    }
+    
+    modifier onlyContractOwner() {
+        require(msg.sender == _owner, "Only owner");
         _;
     }
 
@@ -94,6 +104,7 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
         s_functionsDonId = functionsDonId;
         groth16Verifier = Groth16Verifier(groth16VerifierAddress);
         authorizedCallers[msg.sender] = true;
+        _owner = msg.sender;
         lastUpkeepTimestamp = block.timestamp;
     }
 
@@ -211,7 +222,7 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
         bytes32 requestId,
         bytes memory response,
         bytes memory err
-    ) internal override {
+    ) internal virtual override {
         uint256 proofRequestId = functionsRequestToProofId[requestId];
         require(proofRequestId != 0, "Invalid Functions request");
 
@@ -352,11 +363,11 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
     /**
      * @dev Administrative functions
      */
-    function setUpkeepInterval(uint256 newInterval) external onlyOwner {
+    function setUpkeepInterval(uint256 newInterval) external onlyContractOwner {
         upkeepInterval = newInterval;
     }
 
-    function setAuthorizedCaller(address caller, bool authorized) external onlyOwner {
+    function setAuthorizedCaller(address caller, bool authorized) external onlyContractOwner {
         authorizedCallers[caller] = authorized;
     }
 
@@ -364,7 +375,7 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
         uint256 subscriptionId,
         bytes32 keyHash,
         uint32 callbackGasLimit
-    ) external onlyOwner {
+    ) external onlyContractOwner {
         s_subscriptionId = subscriptionId;
         s_keyHash = keyHash;
         s_callbackGasLimit = callbackGasLimit;
@@ -374,7 +385,7 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
         uint64 subscriptionId,
         uint32 gasLimit,
         bytes32 donId
-    ) external onlyOwner {
+    ) external onlyContractOwner {
         s_functionsSubscriptionId = subscriptionId;
         s_functionsGasLimit = gasLimit;
         s_functionsDonId = donId;
@@ -400,5 +411,9 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
             value /= 10;
         }
         return string(buffer);
+    }
+
+    function getSubscriptionId() public view returns (uint256) {
+        return s_subscriptionId;
     }
 } 

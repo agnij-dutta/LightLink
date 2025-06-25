@@ -1,9 +1,19 @@
 {
   "fuji": {
-    "groth16Verifier": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
-    "zkProofAggregator": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
-    "crossChainVerifier": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
-    "deployedAt": "2025-01-11T12:00:00.000Z",
-    "deployer": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    "groth16Verifier": "0x165Ab644B0b3100C2Ac20A558e0E8FE1aE2E20b5",
+    "zkProofAggregator": "0x6e5A8Ae77B804342B9E02612B2465EE4C5A9ffE2",
+    "novaProofAggregator": "0xA26915d251a7A8D302758371b402d9274d5Df3F1",
+    "crossChainVerifier": "0x0a2ae168a6Ba3EF53d0e0ae5c1802eCDa8C2E29E",
+    "deployedAt": "2025-06-24T16:52:44.062Z",
+    "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449",
+    "network": "fuji",
+    "chainId": 43113
+  },
+  "avalancheFuji": {
+    "groth16Verifier": "0xfB96e58Cf50f575e54eA1A45064F63AbdC533ceC",
+    "zkProofAggregator": "0xd38d6D0625760193236980F9937266fA02636679",
+    "crossChainVerifier": "0x3989303a334Cfb06668D3A84cbC5946D3473fC95",
+    "deployedAt": "2025-06-25T06:07:49.474Z",
+    "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449"
   }
-} 
+}

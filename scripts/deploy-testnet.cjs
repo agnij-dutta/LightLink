@@ -9,7 +9,7 @@ const NETWORK_CONFIG = {
     chainId: 43113,
     explorer: "https://testnet.snowtrace.io",
     linkToken: "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",
-    vrfCoordinator: "0x2eD832Ba664535e5886b75D64C46EB9a228C2610",
+    vrfCoordinator: "0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE",
     vrfKeyHash: "0x354d2f95da55398f44b7cff77da56283d9c6c829a4bdf1bbcaf2ad6a4d081f61",
     functionsRouter: "0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0",
     functionsDonId: "0x66756e2d6176616c616e6368652d66756a692d31000000000000000000000000",
@@ -61,11 +61,11 @@ async function main() {
   const deploymentParams = {
     vrfSubscriptionId: process.env.VRF_SUBSCRIPTION_ID || "1",
     functionsSubscriptionId: process.env.FUNCTIONS_SUBSCRIPTION_ID || "1",
-    vrfCoordinator: config.vrfCoordinator,
+    vrfCoordinator: "0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE",
     vrfKeyHash: config.vrfKeyHash,
-    functionsRouter: config.functionsRouter,
+    functionsRouter: "0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0",
     functionsDonId: config.functionsDonId,
-    linkToken: config.linkToken,
+    linkToken: "0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846",
     ccipRouter: config.ccipRouter
   };
   
