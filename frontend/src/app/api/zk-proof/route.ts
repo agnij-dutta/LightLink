@@ -95,11 +95,11 @@ export async function POST(request: NextRequest) {
     
     // Use mock only if explicitly requested
     if (USE_MOCK) {
-      const result = generateMockProof(circuit, inputs);
-      return NextResponse.json({
-        success: true,
-        ...result
-      });
+    const result = generateMockProof(circuit, inputs);
+    return NextResponse.json({
+      success: true,
+      ...result
+    });
     }
 
     // Call the real backend proof service
