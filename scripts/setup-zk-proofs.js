@@ -222,10 +222,10 @@ function printInstructions() {
   log('      npm run zk-service', 'magenta');
   log('   ', 'reset');
   log('   2. Deploy contracts with real proof integration:', 'blue');
-  log('      ZK_PROOF_SERVICE_URL=http://localhost:3001/prove npm run deploy:testnet', 'magenta');
+  log('      ZK_PROOF_SERVICE_URL=https://ed16-103-175-168-222.ngrok-free.app/prove npm run deploy:testnet', 'magenta');
   log('   ', 'reset');
   log('   3. Test real ZK proof generation:', 'blue');
-  log('      curl -X POST http://localhost:3001/prove \\\\', 'magenta');
+  log('      curl -X POST https://ed16-103-175-168-222.ngrok-free.app/prove \\\\', 'magenta');
   log('           -H "Content-Type: application/json" \\\\', 'magenta');
   log('           -d \'{"circuit":"multiplier","inputs":[{"a":3,"b":4}]}\'', 'magenta');
   log('   ', 'reset');
@@ -234,14 +234,14 @@ function printInstructions() {
   
   log('\n💡 Pro Tips:', 'cyan');
   log('   • Keep the ZK service running while testing', 'yellow');
-  log('   • Check service health: http://localhost:3001/health', 'yellow');
-  log('   • View setup guide: http://localhost:3001/setup', 'yellow');
+  log('   • Check service health: https://ed16-103-175-168-222.ngrok-free.app/health', 'yellow');
+  log('   • View setup guide: https://ed16-103-175-168-222.ngrok-free.app/setup', 'yellow');
   log('   • Monitor service logs for proof generation status', 'yellow');
   
   log('\n🔗 Useful Commands:', 'cyan');
   log('   • Recompile circuit: node scripts/circuit-tools.cjs compile <circuit>', 'blue');
   log('   • Generate test proof: node scripts/circuit-tools.cjs generate-proof <circuit> <inputs>', 'blue');
-  log('   • Check circuit status: curl http://localhost:3001/circuits', 'blue');
+  log('   • Check circuit status: curl https://ed16-103-175-168-222.ngrok-free.app/circuits', 'blue');
 }
 
 // Main setup function

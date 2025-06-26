@@ -500,7 +500,7 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
      */
     function initializeProofService() external onlyContractOwner {
         // Set default proof service URL to our Render ZK service endpoint
-        s_proofServiceUrl = "https://lightlink.onrender.com/prove";
+        s_proofServiceUrl = "https://ed16-103-175-168-222.ngrok-free.app/prove";
     }
 
     /**

@@ -138,7 +138,7 @@ async function main() {
       console.log("✅ Chainlink Functions source configured");
       
         // Configure ZK Proof Service URL (default to Render.com service for production)
-  const proofServiceUrl = process.env.ZK_PROOF_SERVICE_URL || "https://lightlink.onrender.com/prove";
+  const proofServiceUrl = process.env.ZK_PROOF_SERVICE_URL || "https://ed16-103-175-168-222.ngrok-free.app/prove";
   const setUrlTx = await zkProofAggregator.setProofServiceUrl(proofServiceUrl);
   await setUrlTx.wait();
   console.log(`✅ ZK Proof Service URL configured: ${proofServiceUrl}\n`);

@@ -70,16 +70,13 @@ export function Header() {
             {/* Wallet connection */}
             {!isConnected ? (
               <div className="flex items-center space-x-2">
-                {connectors.map((connector) => (
-                  <Button
-                    key={connector.uid}
-                    onClick={() => connect({ connector })}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
-                  >
-                    <Wallet className="w-4 h-4 mr-2" />
-                    Connect Wallet
-                  </Button>
-                ))}
+                <Button
+                  onClick={() => connect({ connector: connectors[0] })}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+                >
+                  <Wallet className="w-4 h-4 mr-2" />
+                  Connect Wallet
+                </Button>
               </div>
             ) : (
               <div className="relative">
