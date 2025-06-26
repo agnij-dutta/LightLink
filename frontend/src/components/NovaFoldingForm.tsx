@@ -70,7 +70,7 @@ export function NovaFoldingForm() {
         }
         
         // Fix: Ensure result.result is properly handled as an object with properties
-        const proofData = result.result;
+        const proofData = result.result as any;
         console.log(`DEBUG Nova: Proof data for index ${idx}:`, proofData);
         
         if (!proofData || typeof proofData !== 'object') {
@@ -82,11 +82,11 @@ export function NovaFoldingForm() {
         const requester = typeof proofData.requester === 'string' ? proofData.requester : 
                          (proofData[0] && typeof proofData[0] === 'string' ? proofData[0] : null);
         const timestamp = typeof proofData.timestamp === 'bigint' ? proofData.timestamp : 
-                         (proofData[1] ? proofData[1] : 0n);
+                         (proofData[1] ? proofData[1] : Number(0));
         const sourceChain = typeof proofData.sourceChain === 'string' ? proofData.sourceChain : 
                            (proofData[2] && typeof proofData[2] === 'string' ? proofData[2] : '');
         const blockNumber = typeof proofData.blockNumber === 'bigint' ? proofData.blockNumber : 
-                           (proofData[3] ? proofData[3] : 0n);
+                           (proofData[3] ? proofData[3] : Number(0));
         const stateRoot = typeof proofData.stateRoot === 'string' ? proofData.stateRoot : 
                          (proofData[4] && typeof proofData[4] === 'string' ? proofData[4] : '0x');
         const isCompleted = typeof proofData.isCompleted === 'boolean' ? proofData.isCompleted : 
