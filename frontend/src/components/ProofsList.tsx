@@ -63,25 +63,45 @@ export function ProofsList() {
 
   // Update proofs state when contract data changes
   useEffect(() => {
-    if (!proofRequests || !address) return;
+    if (!proofRequests || !address) {
+      return;
+    }
+    
     const userProofs: ProofRequestDisplay[] = proofRequests
       .map((result, idx) => {
-        if (!result?.result) return null;
+        if (!result?.result) {
+          return null;
+        }
         
         const proofData = result.result;
-        if (!proofData || typeof proofData !== 'object') return null;
+        if (!proofData || typeof proofData !== 'object') {
+          return null;
+        }
         
         // Access properties directly from the object instead of destructuring as array
-        const requester = proofData[0] as string;
-        const timestamp = proofData[1];
-        const sourceChain = proofData[2];
-        const blockNumber = proofData[3];
-        const stateRoot = proofData[4];
-        const isCompleted = proofData[5];
-        const isValid = proofData[6];
+        // Check if proofData is an array-like object with numeric indices
+        const requester = typeof proofData.requester === 'string' ? proofData.requester : 
+                         (proofData[0] && typeof proofData[0] === 'string' ? proofData[0] : null);
+        const timestamp = typeof proofData.timestamp === 'bigint' ? proofData.timestamp : 
+                         (proofData[1] ? proofData[1] : 0n);
+        const sourceChain = typeof proofData.sourceChain === 'string' ? proofData.sourceChain : 
+                           (proofData[2] && typeof proofData[2] === 'string' ? proofData[2] : '');
+        const blockNumber = typeof proofData.blockNumber === 'bigint' ? proofData.blockNumber : 
+                           (proofData[3] ? proofData[3] : 0n);
+        const stateRoot = typeof proofData.stateRoot === 'string' ? proofData.stateRoot : 
+                         (proofData[4] && typeof proofData[4] === 'string' ? proofData[4] : '0x');
+        const isCompleted = typeof proofData.isCompleted === 'boolean' ? proofData.isCompleted : 
+                           (typeof proofData[5] === 'boolean' ? proofData[5] : false);
+        const isValid = typeof proofData.isValid === 'boolean' ? proofData.isValid : 
+                       (typeof proofData[6] === 'boolean' ? proofData[6] : false);
         
-        if (!requester || !address) return null;
-        if (requester.toLowerCase() !== address.toLowerCase()) return null;
+        if (!requester) {
+          return null;
+        }
+        
+        // Show all proofs regardless of requester for debugging
+        // if (requester.toLowerCase() !== address.toLowerCase()) return null;
+        
         return {
           id: idx.toString(),
           requestId: idx.toString(),

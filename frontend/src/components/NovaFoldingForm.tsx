@@ -27,6 +27,7 @@ export function NovaFoldingForm() {
     const checkStatus = async () => {
       const status = await checkServiceHealth();
       setServiceStatus(status?.status || 'offline');
+      console.log('DEBUG: ZK Service Status:', status);
     };
     checkStatus();
   }, [checkServiceHealth]);
@@ -38,8 +39,13 @@ export function NovaFoldingForm() {
     functionName: 'requestCounter',
   });
 
+  console.log('DEBUG Nova: Contract Address:', CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR);
+  console.log('DEBUG Nova: Request Counter:', requestCounter);
+
   // Fetch all proof requests for the user
   const proofRequestIds = requestCounter ? Array.from({ length: Number(requestCounter) }, (_, i) => BigInt(i)) : [];
+  console.log('DEBUG Nova: Proof Request IDs:', proofRequestIds);
+  
   const { data: proofRequests, refetch: refetchProofs } = useContractReads({
     contracts: proofRequestIds.map((id) => ({
       address: CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR,
@@ -49,28 +55,71 @@ export function NovaFoldingForm() {
     })),
   });
 
+  console.log('DEBUG Nova: Proof Requests Raw:', proofRequests);
+
   // Filter completed proofs for the user
   let completedProofs: Array<{ id: number; sourceChain: string; blockNumber: bigint; stateRoot: string; timestamp: number }> = [];
   if (Array.isArray(proofRequests) && address) {
+    console.log('DEBUG Nova: Processing proof requests for address:', address);
+    
     completedProofs = proofRequests
       .map((result, idx) => {
-        if (!result || !result.result) return null;
+        if (!result || !result.result) {
+          console.log(`DEBUG Nova: No result for index ${idx}`, result);
+          return null;
+        }
         
         // Fix: Ensure result.result is properly handled as an object with properties
         const proofData = result.result;
-        if (!proofData || typeof proofData !== 'object') return null;
+        console.log(`DEBUG Nova: Proof data for index ${idx}:`, proofData);
+        
+        if (!proofData || typeof proofData !== 'object') {
+          console.log(`DEBUG Nova: Invalid proof data for index ${idx}`);
+          return null;
+        }
         
         // Access properties directly from the object instead of destructuring as array
-        const requester = proofData[0] as string;
-        const timestamp = proofData[1];
-        const sourceChain = proofData[2];
-        const blockNumber = proofData[3];
-        const stateRoot = proofData[4];
-        const isCompleted = proofData[5];
-        const isValid = proofData[6];
+        const requester = typeof proofData.requester === 'string' ? proofData.requester : 
+                         (proofData[0] && typeof proofData[0] === 'string' ? proofData[0] : null);
+        const timestamp = typeof proofData.timestamp === 'bigint' ? proofData.timestamp : 
+                         (proofData[1] ? proofData[1] : 0n);
+        const sourceChain = typeof proofData.sourceChain === 'string' ? proofData.sourceChain : 
+                           (proofData[2] && typeof proofData[2] === 'string' ? proofData[2] : '');
+        const blockNumber = typeof proofData.blockNumber === 'bigint' ? proofData.blockNumber : 
+                           (proofData[3] ? proofData[3] : 0n);
+        const stateRoot = typeof proofData.stateRoot === 'string' ? proofData.stateRoot : 
+                         (proofData[4] && typeof proofData[4] === 'string' ? proofData[4] : '0x');
+        const isCompleted = typeof proofData.isCompleted === 'boolean' ? proofData.isCompleted : 
+                           (typeof proofData[5] === 'boolean' ? proofData[5] : false);
+        const isValid = typeof proofData.isValid === 'boolean' ? proofData.isValid : 
+                       (typeof proofData[6] === 'boolean' ? proofData[6] : false);
         
-        if (typeof requester !== 'string' || requester.toLowerCase() !== address.toLowerCase()) return null;
-        if (!isCompleted || !isValid) return null;
+        console.log(`DEBUG Nova: Extracted data for proof ${idx}:`, {
+          requester,
+          timestamp,
+          sourceChain,
+          blockNumber,
+          stateRoot,
+          isCompleted,
+          isValid
+        });
+        
+        if (!requester) {
+          console.log(`DEBUG Nova: Requester is null or undefined for proof ${idx}`);
+          return null;
+        }
+        
+        console.log(`DEBUG Nova: Proof ${idx} - Requester: ${requester}, User address: ${address}`);
+        console.log(`DEBUG Nova: Addresses match?`, requester.toLowerCase() === address.toLowerCase());
+        console.log(`DEBUG Nova: Completed: ${isCompleted}, Valid: ${isValid}`);
+        
+        // Show all proofs for debugging
+        // if (requester.toLowerCase() !== address.toLowerCase()) return null;
+        
+        if (!isCompleted || !isValid) {
+          console.log(`DEBUG Nova: Proof ${idx} is not completed or not valid`);
+          return null;
+        }
         
         return {
           id: idx,
@@ -83,6 +132,8 @@ export function NovaFoldingForm() {
       .filter((x): x is { id: number; sourceChain: string; blockNumber: bigint; stateRoot: string; timestamp: number } => x !== null);
   }
 
+  console.log('DEBUG Nova: Filtered completed proofs:', completedProofs);
+
   const handleSelect = (id: number) => {
     setSelectedProofIds((prev) =>
       prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id]
@@ -94,6 +145,7 @@ export function NovaFoldingForm() {
     
     setIsSubmitting(true);
     try {
+      console.log('DEBUG Nova: Starting Nova folding with IDs:', selectedProofIds);
       await writeContract({
         address: CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR,
         abi: ZK_PROOF_AGGREGATOR_ABI,
