@@ -454,32 +454,55 @@ async function requestExternalProofGeneration(circuitInputs, proofServiceUrl) {
       }
     };
 
-    // For testing purposes, generate mock proof data
-    if (process.env.MOCK_DATA === 'true' || proofServiceUrl.includes('localhost')) {
-      return generateMockProofResult(circuitInputs);
-    }
+    console.log(`Attempting to call external proof service at: ${proofServiceUrl}`);
+    console.log(`Proof request payload:`, JSON.stringify(proofRequest, null, 2));
 
     const response = await Functions.makeHttpRequest({
       url: proofServiceUrl,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": "ChainlinkFunctions/1.0"
       },
       data: proofRequest,
-      timeout: 30000 // 30 second timeout for proof generation
+      timeout: 60000 // Increased to 60 second timeout for proof generation
     });
 
+    console.log(`HTTP Response status:`, response.status);
+    console.log(`HTTP Response data:`, JSON.stringify(response.data, null, 2));
+
     if (response.error) {
+      console.error(`Proof service HTTP error:`, JSON.stringify(response.error));
       throw new Error(`Proof service error: ${JSON.stringify(response.error)}`);
     }
 
+    if (!response.data) {
+      console.error(`No response data received from proof service`);
+      throw new Error(`No response data received from proof service`);
+    }
+
+    // Check if the proof service returned a successful response
+    if (response.data.success === false) {
+      console.error(`Proof service returned failure:`, response.data.error);
+      throw new Error(`Proof service failed: ${response.data.error}`);
+    }
+
+    console.log(`Successfully received proof from external service`);
     return response.data;
 
   } catch (error) {
     console.error("External proof generation failed:", error.message);
+    console.error("Full error details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
     
-    // Return mock proof data for testing purposes
+    // Only return mock data if explicitly enabled via MOCK_DATA environment variable
+    if (process.env.MOCK_DATA === 'true') {
+      console.log("MOCK_DATA=true, returning mock proof result");
     return generateMockProofResult(circuitInputs);
+    }
+    
+    // For production, we want to propagate the error so the caller knows the real service failed
+    throw new Error(`Real proof generation failed: ${error.message}`);
   }
 }
 
@@ -536,6 +559,7 @@ async function main() {
     console.log(`Block numbers: ${JSON.stringify(blockNumbers)}`);
     console.log(`Target chain: ${targetChainId}`);
     console.log(`Merkle depth: ${merkleDepth}`);
+    console.log(`Proof service URL: ${proofServiceUrl}`);
 
     // Validate inputs
     if (!Array.isArray(blockNumbers) || blockNumbers.length === 0) {
@@ -630,8 +654,30 @@ async function main() {
     console.log("Prepared circuit inputs for real ZK proof generation");
 
     // Attempt to call external proof generation service
-    const proofResult = await requestExternalProofGeneration(circuitInputs, proofServiceUrl);
+    let proofResult;
+    let proofGenerationError = null;
+    
+    try {
+      proofResult = await requestExternalProofGeneration(circuitInputs, proofServiceUrl);
     console.log(`Proof generation status: ${proofResult.status}`);
+    } catch (error) {
+      console.error(`Failed to generate proof via external service: ${error.message}`);
+      proofGenerationError = error.message;
+      
+      // Create a fallback result indicating the proof generation attempt
+      proofResult = {
+        status: "external_service_failed",
+        error: error.message,
+        circuitInputs: circuitInputs,
+        metadata: {
+          circuit: "proof_aggregator", 
+          generationTime: 0,
+          verifiedLocally: false,
+          isMock: false,
+          failureReason: error.message
+        }
+      };
+    }
 
     // Create a compact result object that fits within 256-byte limit
     const validityHash = createHash(JSON.stringify(circuitInputs));
@@ -645,6 +691,7 @@ async function main() {
       b: blocksData.length, // blockCount
       h: validityHash.slice(0, 16), // truncated hash (first 16 chars)
       p: hasProof ? 1 : 0, // hasProof (1/0 instead of boolean)
+      ps: proofResult.status.slice(0, 20), // proof service status (truncated)
       ts: Math.floor(Date.now() / 1000) // timestamp
     };
 
@@ -683,4 +730,4 @@ async function main() {
 }
 
 // Execute the main function
-return await main(); 
+(async () => { return await main(); })(); 
