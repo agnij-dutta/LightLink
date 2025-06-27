@@ -10,10 +10,10 @@
     "chainId": 43113
   },
   "avalancheFuji": {
-    "groth16Verifier": "0x22E7d3c5F596eDd667546d9Cc31F01941CC49092",
-    "zkProofAggregator": "0xfF532DC0d5611fAC2B857CE353f6606685Bc2ABF",
-    "crossChainVerifier": "0x9876B55b7a32E258c5A3b7B3a0cB67646F6aA528",
-    "deployedAt": "2025-06-26T15:02:14.221Z",
+    "groth16Verifier": "0x028412044Fe342cBA1795BbD453Cd0F86d082a85",
+    "zkProofAggregator": "0x2f54Ca53f4E83d8E876bd4672Fb625066f0a2D98",
+    "crossChainVerifier": "0xB3a9d15Ac6EAb04a73D22729e4dC3CDEb62fEc37",
+    "deployedAt": "2025-06-27T12:24:51.955Z",
     "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449"
   }
 }
