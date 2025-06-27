@@ -50,10 +50,10 @@ npm run setup-zk
 npm run zk-service
 
 # 4. In another terminal, deploy with real proof integration
-ZK_PROOF_SERVICE_URL=https://ed16-103-175-168-222.ngrok-free.app/prove npm run deploy:testnet
+ZK_PROOF_SERVICE_URL=https://light-link.vercel.app/api/prove npm run deploy:testnet
 
 # 5. Test real ZK proof generation
-curl -X POST https://ed16-103-175-168-222.ngrok-free.app/prove \\
+curl -X POST https://light-link.vercel.app/api/prove \\
      -H "Content-Type: application/json" \\
      -d '{"circuit":"multiplier","inputs":[{"a":3,"b":4}]}'
 
@@ -119,7 +119,7 @@ function setProofServiceUrl(string memory url) external onlyContractOwner;
 
 ```bash
 # Optional: Custom ZK service URL (defaults to ngrok URL)
-ZK_PROOF_SERVICE_URL=https://ed16-103-175-168-222.ngrok-free.app/prove
+ZK_PROOF_SERVICE_URL=https://light-link.vercel.app/api/prove
 
 # Optional: Custom service port
 ZK_PROOF_SERVICE_PORT=3001
@@ -144,7 +144,7 @@ npm run setup-zk
 npm run zk-service
 
 # Then set the environment variable
-export ZK_PROOF_SERVICE_URL=https://your-zk-service.com/prove
+export ZK_PROOF_SERVICE_URL=https://light-link.vercel.app/api/prove
 npm run deploy:mainnet
 ```
 
@@ -152,8 +152,8 @@ npm run deploy:mainnet
 
 To verify real proofs are working:
 
-1. Check service health: `curl https://ed16-103-175-168-222.ngrok-free.app/health`
-2. Generate test proof: `curl -X POST https://ed16-103-175-168-222.ngrok-free.app/prove -H "Content-Type: application/json" -d '{"circuit":"multiplier","inputs":[{"a":3,"b":4}]}'`
+1. Check service health: `curl https://light-link.vercel.app/api/health`
+2. Generate test proof: `curl -X POST https://light-link.vercel.app/api/prove -H "Content-Type: application/json" -d '{"circuit":"multiplier","inputs":[{"a":3,"b":4}]}'`
 3. Look for `"hasRealProof": true` in contract responses
 4. Monitor service logs for proof generation times
 

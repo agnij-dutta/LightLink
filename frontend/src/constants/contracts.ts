@@ -7,8 +7,8 @@ export const CONTRACT_ADDRESSES = {
 
 // ZK Proof Service Configuration
 export const ZK_PROOF_SERVICE = {
-  URL: process.env.NEXT_PUBLIC_ZK_PROOF_SERVICE_URL || 'https://ed16-103-175-168-222.ngrok-free.app/prove',
-  HEALTH_ENDPOINT: 'https://ed16-103-175-168-222.ngrok-free.app/health',
+  URL: process.env.NEXT_PUBLIC_ZK_PROOF_SERVICE_URL || 'https://light-link.vercel.app/api/prove',
+  HEALTH_ENDPOINT: 'https://light-link.vercel.app/api/health',
   DEFAULT_MERKLE_DEPTH: 8,
 } as const;
 

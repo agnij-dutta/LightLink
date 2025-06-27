@@ -32,28 +32,28 @@ The service runs on port **10000** by default.
 Check service and circuit status.
 
 ```bash
-curl http://localhost:10000/api/health
+curl https://light-link.vercel.app/api/health
 ```
 
 ### GET /api/setup
 Get setup instructions for circuit preparation.
 
 ```bash
-curl http://localhost:10000/api/setup
+curl https://light-link.vercel.app/api/setup
 ```
 
 ### POST /api/test
 Test service connectivity.
 
 ```bash
-curl -X POST http://localhost:10000/api/test
+curl -X POST https://light-link.vercel.app/api/test
 ```
 
 ### POST /api/prove
 Generate ZK proofs.
 
 ```bash
-curl -X POST http://localhost:10000/api/prove \
+curl -X POST https://light-link.vercel.app/api/prove \
   -H "Content-Type: application/json" \
   -d '{
     "circuit": "proof_aggregator",
@@ -134,5 +134,5 @@ backend/
 This backend is designed to work with the LightLink frontend. Update the frontend's ZK service URL to point to this backend:
 
 ```env
-NEXT_PUBLIC_ZK_PROOF_SERVICE_URL=http://localhost:10000
+NEXT_PUBLIC_ZK_PROOF_SERVICE_URL=https://light-link.vercel.app/api/prove
 ``` 

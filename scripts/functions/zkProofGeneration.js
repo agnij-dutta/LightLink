@@ -7,7 +7,7 @@ const chainId = parseInt(args[0]);
 const blockNumbers = JSON.parse(args[1]); // Array of block numbers to verify
 const merkleDepth = parseInt(args[2]) || 8;
 const targetChainId = parseInt(args[3]);
-const proofServiceUrl = args[4] || "https://ed16-103-175-168-222.ngrok-free.app/prove"; // External proof generation service URL
+const proofServiceUrl = args[4] || "https://light-link.vercel.app/api/prove"; // External proof generation service URL
 
 // Configuration for different chains with proper API endpoints
 const CHAIN_CONFIGS = {

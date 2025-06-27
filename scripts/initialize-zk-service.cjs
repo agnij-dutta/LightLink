@@ -47,7 +47,7 @@ async function main() {
   const zkProofAggregator = ZKProofAggregator.attach(zkProofAggregatorAddress);
   
   // Set the proof service URL to the new Render.com service
-  const proofServiceUrl = 'https://ed16-103-175-168-222.ngrok-free.app/prove';
+  const proofServiceUrl = 'https://light-link.vercel.app/api/prove';
   console.log(`Setting proof service URL to: ${proofServiceUrl}`);
   
   try {

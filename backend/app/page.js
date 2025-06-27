@@ -15,10 +15,10 @@ export default function Home() {
       <h2>Example Usage:</h2>
       <pre style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px', overflow: 'auto' }}>
 {`// Health Check
-curl http://localhost:10000/api/health
+curl https://light-link.vercel.app/api/health
 
 // Generate Proof
-curl -X POST http://localhost:10000/api/prove \\
+curl -X POST https://light-link.vercel.app/api/prove \\
   -H "Content-Type: application/json" \\
   -d '{
     "circuit": "proof_aggregator",
@@ -34,7 +34,7 @@ curl -X POST http://localhost:10000/api/prove \\
   }'`}
       </pre>
       
-      <p><em>Service runs on port 10000 by default.</em></p>
+      <p><em>Service deployed at <a href="https://light-link.vercel.app" target="_blank">https://light-link.vercel.app</a></em></p>
     </div>
   )
 } 

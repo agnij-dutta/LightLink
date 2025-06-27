@@ -30,7 +30,8 @@
     "setup-zk": "node scripts/setup-zk-proofs.js",
     "setup-zk:full": "node scripts/setup-zk-proofs.js --start-service",
     "zk-service": "node scripts/zk-proof-service.js",
-    "test:zk": "node scripts/setup-zk-proofs.js --skip-tests"
+    "test:zk": "node scripts/setup-zk-proofs.js --skip-tests",
+    "update-proof-service-url": "npx hardhat run scripts/update-proof-service-url.cjs --network avalancheFuji"
   },
   "keywords": [
     "chainlink",
