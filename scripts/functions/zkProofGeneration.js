@@ -2,6 +2,10 @@
 // This code runs on the Chainlink Functions DON to fetch blockchain data
 // and prepare inputs for real ZK proof generation via external service
 
+// The `ethers` library is available globally in the Chainlink Functions runtime.
+// We assign it to a local constant for clarity and to avoid potential conflicts.
+const ethers = Functions.ethers;
+
 // Input parameters from the smart contract
 const chainId = parseInt(args[0]);
 const blockNumbers = JSON.parse(args[1]); // Array of block numbers to verify
@@ -55,12 +59,36 @@ const CHAIN_CONFIGS = {
   }
 };
 
-// Helper function to create hash using Web3 crypto (available in Chainlink Functions)
+// Helper function to create deterministic hash using only JavaScript built-ins
 function createHash(data) {
-  // Convert data to hex string if it's not already
-  const hexData = typeof data === 'string' ? data : JSON.stringify(data);
-  // Use Functions.keccak256 which is available in Chainlink Functions runtime
-  return Functions.keccak256(hexData);
+  // Convert data to string format for hashing
+  const dataString = typeof data === 'string' ? data : JSON.stringify(data);
+  
+  // Simple deterministic hash function using only JavaScript built-ins
+  // This creates a 32-byte hex hash similar to keccak256 format
+  let hash = 0;
+  let hash2 = 0;
+  
+  for (let i = 0; i < dataString.length; i++) {
+    const char = dataString.charCodeAt(i);
+    hash = ((hash << 5) - hash + char) & 0xffffffff;
+    hash2 = ((hash2 << 3) + char * 7) & 0xffffffff;
+  }
+  
+  // Convert to 32-byte hex (64 characters) ensuring only positive values
+  // Use Math.abs and modulo to ensure positive values within valid range
+  const toPositiveHex = (val) => (Math.abs(val) % 0x100000000).toString(16).padStart(8, '0');
+  
+  const hex1 = toPositiveHex(hash);
+  const hex2 = toPositiveHex(hash2);
+  const hex3 = toPositiveHex(hash ^ hash2);
+  const hex4 = toPositiveHex((hash + hash2) * 13);
+  const hex5 = toPositiveHex(hash * 17 + hash2 * 19);
+  const hex6 = toPositiveHex(hash2 * 23 + hash * 29);
+  const hex7 = toPositiveHex(hash ^ (hash2 << 1));
+  const hex8 = toPositiveHex(hash2 ^ (hash << 2));
+  
+  return '0x' + hex1 + hex2 + hex3 + hex4 + hex5 + hex6 + hex7 + hex8;
 }
 
 // Helper function to fetch block data with improved response handling
