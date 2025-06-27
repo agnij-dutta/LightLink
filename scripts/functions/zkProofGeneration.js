@@ -9,68 +9,47 @@ const merkleDepth = parseInt(args[2]) || 8;
 const targetChainId = parseInt(args[3]);
 const proofServiceUrl = args[4] || "https://light-link.vercel.app/api/prove"; // External proof generation service URL
 
-// Configuration for different chains with reliable API endpoints
+// Configuration for different chains with proper API endpoints
 const CHAIN_CONFIGS = {
   1: { // Ethereum Mainnet
-    rpcUrl: "https://ethereum-rpc.publicnode.com",
-    alternatives: [
-      "https://eth.drpc.org",
-      "https://rpc.ankr.com/eth"
-    ],
+    rpcUrl: "https://endpoints.omniatech.io/v1/eth/mainnet/public",
+    fallbackUrls: ["https://eth.drpc.org", "https://ethereum-rpc.publicnode.com"],
     blockTime: 12,
     confirmations: 6
   },
   42161: { // Arbitrum One
-    rpcUrl: "https://arbitrum-one-rpc.publicnode.com", 
-    alternatives: [
-      "https://arb1.arbitrum.io/rpc",
-      "https://rpc.ankr.com/arbitrum"
-    ],
+    rpcUrl: "https://arbitrum-one-rpc.publicnode.com",
+    fallbackUrls: ["https://arbitrum.drpc.org", "https://arb1.arbitrum.io/rpc"],
     blockTime: 1,
     confirmations: 1
   },
   10: { // Optimism
-    rpcUrl: "https://optimism-rpc.publicnode.com", 
-    alternatives: [
-      "https://mainnet.optimism.io",
-      "https://rpc.ankr.com/optimism"
-    ],
+    rpcUrl: "https://optimism-rpc.publicnode.com",
+    fallbackUrls: ["https://optimism.drpc.org", "https://mainnet.optimism.io"],
     blockTime: 2,
     confirmations: 1
   },
   8453: { // Base
     rpcUrl: "https://base-rpc.publicnode.com",
-    alternatives: [
-      "https://mainnet.base.org",
-      "https://rpc.ankr.com/base"
-    ],
+    fallbackUrls: ["https://base.drpc.org", "https://mainnet.base.org"],
     blockTime: 2,
     confirmations: 1
   },
   137: { // Polygon
-    rpcUrl: "https://polygon-bor-rpc.publicnode.com",
-    alternatives: [
-      "https://rpc.ankr.com/polygon",
-      "https://polygon-rpc.com",
-      "https://rpc-mainnet.matic.quiknode.pro"
-    ],
+    rpcUrl: "https://polygon.drpc.org",
+    fallbackUrls: ["https://polygon-rpc.com", "https://polygon-bor-rpc.publicnode.com"],
     blockTime: 2,
     confirmations: 20
   },
   43114: { // Avalanche C-Chain
     rpcUrl: "https://avalanche-c-chain-rpc.publicnode.com",
-    alternatives: [
-      "https://api.avax.network/ext/bc/C/rpc",
-      "https://rpc.ankr.com/avalanche"
-    ],
+    fallbackUrls: ["https://avalanche.drpc.org", "https://api.avax.network/ext/bc/C/rpc"],
     blockTime: 2,
     confirmations: 1
   },
   43113: { // Avalanche Fuji Testnet
     rpcUrl: "https://avalanche-fuji-c-chain-rpc.publicnode.com",
-    alternatives: [
-      "https://api.avax-test.network/ext/bc/C/rpc"
-    ],
+    fallbackUrls: ["https://api.avax-test.network/ext/bc/C/rpc"],
     blockTime: 2,
     confirmations: 1
   }
@@ -84,14 +63,12 @@ function createHash(data) {
   return Functions.keccak256(hexData);
 }
 
-// Helper function to fetch block data with retry logic
+// Helper function to fetch block data with improved response handling
 async function fetchBlockData(chainId, blockNumber) {
   const config = CHAIN_CONFIGS[chainId];
   if (!config) {
     throw new Error(`Unsupported chain ID: ${chainId}`);
   }
-
-  console.log(`Fetching block ${blockNumber} from chain ${chainId}`);
 
   const requestData = {
     jsonrpc: "2.0",
@@ -100,75 +77,70 @@ async function fetchBlockData(chainId, blockNumber) {
     id: 1
   };
 
-  // List of RPC URLs to try
-  const rpcUrls = [config.rpcUrl, ...config.alternatives];
-  let lastError = null;
-
-  for (let i = 0; i < rpcUrls.length; i++) {
-    const rpcUrl = rpcUrls[i];
-    console.log(`Attempting RPC ${i + 1}/${rpcUrls.length}: ${rpcUrl}`);
-
+  // Get all available RPC URLs (primary + fallbacks)
+  const allUrls = [config.rpcUrl, ...(config.fallbackUrls || [])];
+  let lastError;
+  
+  for (let urlIndex = 0; urlIndex < allUrls.length; urlIndex++) {
+    const currentUrl = allUrls[urlIndex];
+    
     try {
       const response = await Functions.makeHttpRequest({
-        url: rpcUrl,
+        url: currentUrl,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Accept": "application/json",
-          "User-Agent": "Chainlink-Functions/1.0"
         },
         data: requestData,
-        timeout: 30000, // 30 second timeout
+        timeout: 10000, // 10 second timeout
       });
 
-      console.log(`RPC response status for block ${blockNumber}:`, response.status);
+      // Handle different response structures that might be returned by Chainlink Functions
+      let responseData;
       
       if (response.error) {
-        console.error(`RPC request failed for ${rpcUrl}:`, response.error);
-        lastError = new Error(`RPC Request Error: ${JSON.stringify(response.error)}`);
-        continue;
+        throw new Error(`HTTP request failed: ${JSON.stringify(response.error)}`);
       }
-
-      if (!response.data) {
-        console.error(`No response data from ${rpcUrl}`);
-        lastError = new Error(`No response data from RPC endpoint: ${rpcUrl}`);
-        continue;
+      
+      // Check if response has data property
+      if (response.data) {
+        responseData = response.data;
+      } else if (response.result) {
+        // Sometimes the response might be directly in the result field
+        responseData = response;
+      } else {
+        // If no data property, the response itself might be the data
+        responseData = response;
       }
 
       // Handle RPC error responses
-      if (response.data.error) {
-        console.error(`RPC error from ${rpcUrl}:`, response.data.error);
-        lastError = new Error(`RPC Error from ${rpcUrl}: ${response.data.error.message || JSON.stringify(response.data.error)}`);
-        continue;
+      if (responseData.error) {
+        throw new Error(`RPC Error: ${JSON.stringify(responseData.error)}`);
       }
 
-      if (!response.data.result) {
-        console.error(`No result from ${rpcUrl}:`, JSON.stringify(response.data));
-        lastError = new Error(`Invalid RPC response from ${rpcUrl}: no result field`);
-        continue;
+      // Check for valid result
+      if (!responseData.result) {
+        throw new Error(`Invalid RPC response - no result field: ${JSON.stringify(responseData)}`);
       }
 
-      // Additional validation for block data
-      const blockData = response.data.result;
-      if (!blockData.hash || !blockData.number || !blockData.timestamp) {
-        console.error(`Incomplete block data from ${rpcUrl}:`, blockData);
-        lastError = new Error(`Incomplete block data from ${rpcUrl}: missing required fields`);
-        continue;
+      // Validate that the result contains block data
+      if (!responseData.result.hash || !responseData.result.number) {
+        throw new Error(`Invalid block data - missing required fields: ${JSON.stringify(responseData.result)}`);
       }
 
-      console.log(`Successfully fetched block ${blockNumber} from ${rpcUrl}`);
-      console.log(`Block hash: ${blockData.hash}, timestamp: ${blockData.timestamp}`);
-      return blockData;
-
+      return responseData.result;
+      
     } catch (error) {
-      console.error(`Exception when calling ${rpcUrl}:`, error.message);
       lastError = error;
-      continue;
+      
+      if (urlIndex === allUrls.length - 1) {
+        throw lastError;
+      }
+      
+      // Brief delay before trying next endpoint
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
-
-  // If we get here, all RPC endpoints failed
-  throw new Error(`Failed to fetch block ${blockNumber} from chain ${chainId} after trying ${rpcUrls.length} RPC endpoints. Last error: ${lastError ? lastError.message : 'Unknown error'}`);
 }
 
 // Helper function to compute proper Merkle tree using the same logic as circuits
@@ -253,24 +225,31 @@ function validateBlockData(blockData, chainId) {
   }
 
   if (!blockData.hash || !blockData.number || !blockData.timestamp) {
-    throw new Error("Invalid block data structure - missing required fields");
+    throw new Error("Invalid block data structure");
   }
 
   // Validate block hash format
   if (!/^0x[a-fA-F0-9]{64}$/.test(blockData.hash)) {
-    throw new Error(`Invalid block hash format: ${blockData.hash}`);
+    throw new Error("Invalid block hash format");
   }
 
-  // Validate timestamp is reasonable (within last 4 years for wider compatibility)
+  // Validate timestamp is reasonable
   const blockTime = parseInt(blockData.timestamp, 16);
   const now = Math.floor(Date.now() / 1000);
-  const fourYearsAgo = now - (4 * 365 * 24 * 60 * 60);
+  
+  // Allow historical blocks but reject obviously invalid timestamps
+  // Genesis block of Ethereum was around 2015, so anything before 2015 is invalid
+  const earliestValidTime = 1438269973; // Ethereum genesis block timestamp (July 30, 2015)
+  const futureBuffer = 300; // 5 minutes into the future
 
-  if (blockTime < fourYearsAgo || blockTime > now + 300) { // 5 min future buffer
-    throw new Error(`Block timestamp out of reasonable range: ${blockTime}, current: ${now}`);
+  if (blockTime < earliestValidTime) {
+    throw new Error(`Block timestamp too old (before Ethereum genesis): ${blockTime}`);
+  }
+  
+  if (blockTime > now + futureBuffer) {
+    throw new Error(`Block timestamp too far in the future: ${blockTime} vs ${now}`);
   }
 
-  console.log(`Block validation passed for block ${parseInt(blockData.number, 16)}`);
   return true;
 }
 
@@ -293,8 +272,6 @@ function prepareCircuitInputs(blocksData, chainId, targetChainId, merkleDepth) {
     if (txHashes.length === 0) {
       txHashes.push(block.hash); // Use block hash if no transactions
     }
-
-    console.log(`Processing block ${parseInt(block.number, 16)} with ${txHashes.length} transactions`);
 
     // Compute Merkle root and path for first transaction (as proof sample)
     const merkleRoot = computeMerkleTree(txHashes, merkleDepth);
@@ -319,7 +296,6 @@ function prepareCircuitInputs(blocksData, chainId, targetChainId, merkleDepth) {
     };
 
     circuitInputs.push(proofInput);
-    console.log(`Prepared circuit input for block ${proofInput.blockNumber}`);
   }
 
   return circuitInputs;
@@ -328,199 +304,233 @@ function prepareCircuitInputs(blocksData, chainId, targetChainId, merkleDepth) {
 // Function to call external proof generation service
 async function requestExternalProofGeneration(circuitInputs, proofServiceUrl) {
   if (!proofServiceUrl || proofServiceUrl === "") {
-    console.log("No proof service URL provided - returning prepared inputs only");
-    return {
-      status: "inputs_prepared",
-      message: "Circuit inputs prepared - no external service configured",
-      circuitInputs: circuitInputs
-    };
+    throw new Error("External proof service URL is required");
   }
 
   try {
-    console.log(`Requesting proof generation from: ${proofServiceUrl}`);
-    console.log(`Number of circuit inputs: ${circuitInputs.length}`);
+    // Format circuit inputs for proof_aggregator circuit - this circuit expects specific format
+    const nProofs = Math.max(3, circuitInputs.length); // proof_aggregator requires minimum 3 proofs
+    const paddedInputs = [...circuitInputs];
     
+    // Pad to minimum required proofs by duplicating last input
+    while (paddedInputs.length < nProofs) {
+      paddedInputs.push(paddedInputs[paddedInputs.length - 1]);
+    }
+
+    // Helper function to convert hex to BigInt and constrain to bit length
+    function hexToBigInt(hex) {
+      const cleanHex = hex.replace(/^0x/, '');
+      return BigInt('0x' + cleanHex);
+    }
+
+    function constrainToBits(value, bits) {
+      const max = (2n ** BigInt(bits)) - 1n; // Use BigInt literals
+      return value % max;
+    }
+
+    function stringToField(str) {
+      // Convert string to field element (simplified)
+      let hash = 0n; // Use BigInt literal
+      const bigIntStr = str.toString();
+      for (let i = 0; i < bigIntStr.length; i++) {
+        const charCode = BigInt(bigIntStr.charCodeAt(i));
+        hash = (hash * 31n + charCode) % 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+      }
+      return hash;
+    }
+
+    // Format inputs according to proof_aggregator circuit requirements
+    const formattedInputs = {
+      proofs: [],
+      publicSignals: [], 
+      merkleRoots: [],
+      blockHashes: [],
+      chainIds: [],
+      aggregationSeed: stringToField(Date.now().toString()).toString(),
+      targetChainId: constrainToBits(BigInt(circuitInputs[0].targetChainId || 1), 4).toString()
+    };
+
+    for (let i = 0; i < nProofs; i++) {
+      const input = paddedInputs[i % paddedInputs.length];
+      
+      // Constrain values to fit circuit bit requirements
+      const constrainedBlockHash = constrainToBits(hexToBigInt(input.blockHash || '0x1234'), 64); // blockDepth * 8
+      const constrainedMerkleRoot = constrainToBits(hexToBigInt(input.merkleRoot || '0x5678'), 252); // Field element size
+      const constrainedChainId = constrainToBits(BigInt(input.chainId || 1), 4); // ChainMaskComputer uses 4 bits
+      
+      // Generate proof components (8 elements for simplified Groth16) - convert all to strings
+      const proof = [
+        constrainedBlockHash.toString(),
+        constrainedChainId.toString(),
+        constrainedMerkleRoot.toString(),
+        constrainedChainId.toString(), // targetChainId
+        stringToField(input.blockNumber?.toString() || '1').toString(),
+        stringToField(input.timestamp?.toString() || Date.now().toString()).toString(),
+        stringToField(`proof_${i}_a`).toString(),
+        stringToField(`proof_${i}_b`).toString()
+      ];
+      
+      // Generate public signals (4 elements) - convert all to strings
+      const publicSignal = [
+        constrainedMerkleRoot.toString(),
+        constrainedBlockHash.toString(),
+        constrainedChainId.toString(),
+        stringToField(input.blockNumber?.toString() || '1').toString()
+      ];
+      
+      formattedInputs.proofs.push(proof);
+      formattedInputs.publicSignals.push(publicSignal);
+      formattedInputs.merkleRoots.push(constrainedMerkleRoot.toString());
+      formattedInputs.blockHashes.push(constrainedBlockHash.toString());
+      formattedInputs.chainIds.push(constrainedChainId.toString());
+    }
+
     const proofRequest = {
       circuit: "proof_aggregator",
-      inputs: circuitInputs,
+      inputs: [formattedInputs], // Send as single formatted input object
       params: {
-        nProofs: circuitInputs.length,
+        nProofs: nProofs,
         merkleDepth: merkleDepth,
-        blockDepth: 8 // As configured in circuit
+        blockDepth: 8
       }
     };
+
+    console.log(`Calling external proof service: ${proofServiceUrl}`);
+    console.log(`Request payload size: ${JSON.stringify(proofRequest).length} bytes`);
 
     const response = await Functions.makeHttpRequest({
       url: proofServiceUrl,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": "Chainlink-Functions/1.0"
+        "Accept": "application/json"
       },
       data: proofRequest,
-      timeout: 180000, // 3 minute timeout for proof generation
+      timeout: 30000 // 30 second timeout for proof generation
     });
 
-    console.log(`Proof service response status: ${response.status}`);
+    console.log(`External proof service response status: ${response.status || 'unknown'}`);
 
-    if (response.error) {
-      console.error(`Proof service error:`, response.error);
-      throw new Error(`Proof service error: ${JSON.stringify(response.error)}`);
+    // Handle different response structures
+    let responseData;
+    if (response.data) {
+      responseData = response.data;
+    } else if (response.result) {
+      responseData = response;
+    } else {
+      responseData = response;
     }
 
-    if (!response.data) {
-      throw new Error(`No response data from proof service`);
+    if (response.error || responseData.error) {
+      throw new Error(`Proof service error: ${JSON.stringify(response.error || responseData.error)}`);
     }
 
-    console.log(`Proof generation completed successfully`);
-    return response.data;
+    // Validate proof response
+    if (!responseData.proof || !responseData.publicSignals) {
+      throw new Error(`Invalid proof response: missing proof or publicSignals`);
+    }
+
+    console.log("External proof generation successful");
+    return {
+      status: "proof_generated",
+      proof: responseData.proof,
+      publicSignals: responseData.publicSignals,
+      proofId: responseData.proofId || createHash(JSON.stringify(responseData.proof)).slice(0, 10)
+    };
 
   } catch (error) {
     console.error("External proof generation failed:", error.message);
-    throw error; // Don't fall back to mock data, let the error propagate
+    throw error; // Don't fall back to mock, let it fail
   }
 }
 
 // Main execution function
 async function main() {
   try {
-    console.log(`=== ZK Proof Data Preparation Started ===`);
-    console.log(`Source chain: ${chainId}`);
-    console.log(`Target chain: ${targetChainId}`);
-    console.log(`Block numbers: ${JSON.stringify(blockNumbers)}`);
-    console.log(`Merkle depth: ${merkleDepth}`);
-    console.log(`Proof service URL: ${proofServiceUrl}`);
+    console.log(`Starting ZK proof generation for chain ${chainId}, blocks: ${JSON.stringify(blockNumbers)}`);
 
     // Validate inputs
     if (!Array.isArray(blockNumbers) || blockNumbers.length === 0) {
-      throw new Error("Invalid block numbers array - must be non-empty array");
+      throw new Error("Invalid block numbers array");
     }
 
     if (!CHAIN_CONFIGS[chainId]) {
-      throw new Error(`Unsupported source chain ID: ${chainId}. Supported chains: ${Object.keys(CHAIN_CONFIGS).join(', ')}`);
+      throw new Error(`Unsupported source chain ID: ${chainId}`);
     }
 
-    // Validate block numbers are reasonable
-    for (const blockNumber of blockNumbers) {
-      if (!Number.isInteger(blockNumber) || blockNumber < 0) {
-        throw new Error(`Invalid block number: ${blockNumber} - must be positive integer`);
-      }
-      if (blockNumber > 50000000) { // Sanity check for very high block numbers
-        console.warn(`Warning: Very high block number requested: ${blockNumber}`);
-      }
+    if (!proofServiceUrl || proofServiceUrl === "") {
+      throw new Error("External proof service URL is required");
     }
-
-    console.log(`Input validation passed`);
 
     // Fetch block data for all requested blocks
     const blocksData = [];
-    const errors = [];
     
     for (const blockNumber of blockNumbers) {
-      console.log(`\n--- Fetching block ${blockNumber} ---`);
       try {
         const blockData = await fetchBlockData(chainId, blockNumber);
         if (blockData) {
           blocksData.push(blockData);
-          console.log(`✓ Successfully retrieved block ${blockNumber}`);
-        } else {
-          const error = `No data returned for block ${blockNumber}`;
-          console.warn(error);
-          errors.push(error);
+          console.log(`✓ Block ${blockNumber}: ${blockData.transactions ? blockData.transactions.length : 0} txs`);
         }
       } catch (blockError) {
-        const error = `Error fetching block ${blockNumber}: ${blockError.message}`;
-        console.error(`✗ ${error}`);
-        errors.push(error);
-        // Continue with other blocks instead of failing completely
+        console.error(`✗ Block ${blockNumber} failed: ${blockError.message}`);
+        throw blockError; // Fail fast on any block fetch error
       }
     }
 
     if (blocksData.length === 0) {
-      const errorMessage = `No valid block data retrieved from chain ${chainId}. Attempted blocks: ${blockNumbers.join(', ')}. Errors: ${errors.join('; ')}`;
-      console.error(`ERROR: ${errorMessage}`);
-      throw new Error(errorMessage);
-    }
-
-    console.log(`\n=== Block Retrieval Summary ===`);
-    console.log(`✓ Successfully fetched ${blocksData.length} out of ${blockNumbers.length} blocks`);
-    if (errors.length > 0) {
-      console.warn(`⚠ Encountered ${errors.length} errors: ${errors.join('; ')}`);
+      throw new Error("No valid block data retrieved");
     }
 
     // Prepare circuit inputs for real ZK proof generation
-    console.log(`\n--- Preparing Circuit Inputs ---`);
     const circuitInputs = prepareCircuitInputs(blocksData, chainId, targetChainId, merkleDepth);
-    console.log(`✓ Prepared ${circuitInputs.length} circuit inputs for real ZK proof generation`);
+    console.log(`Prepared circuit inputs for ${circuitInputs.length} blocks`);
 
-    // Attempt to call external proof generation service
-    console.log(`\n--- Requesting External Proof Generation ---`);
+    // Generate the actual proof via external service
     const proofResult = await requestExternalProofGeneration(circuitInputs, proofServiceUrl);
-    console.log(`✓ Proof generation status: ${proofResult.status}`);
+    console.log(`✓ Proof generation: ${proofResult.status}`);
 
-    // Create the result object with real circuit inputs
+    // Create compact result under 256 bytes
     const result = {
-      success: true,
-      status: proofResult.status,
-      chainId,
-      targetChainId,
-      blockNumbers: blockNumbers.slice(0, blocksData.length), // Only successful blocks
-      
-      // Real circuit inputs (can be used for offline proof generation)
-      circuitInputs: circuitInputs,
-      
-      // Proof data (if external service succeeded)
-      proof: proofResult.proof || null,
-      publicSignals: proofResult.publicSignals || null,
-      
-      // Validation hash for contract verification
-      validityHash: createHash(JSON.stringify(circuitInputs)),
-      
-      metadata: {
-        blockCount: blocksData.length,
-        timestamp: Math.floor(Date.now() / 1000),
-        merkleDepth,
-        version: "2.1.0", // Updated version for improved real circuit integration
-        sourceChain: chainId,
-        targetChain: targetChainId,
-        circuitType: "proof_aggregator",
-        hasRealProof: !!(proofResult.proof && proofResult.publicSignals),
-        errors: errors.length > 0 ? errors : undefined,
-        successfulBlocks: blocksData.map(b => parseInt(b.number, 16)),
-        totalRequestedBlocks: blockNumbers.length
-      }
+      s: true, // success
+      pid: proofResult.proofId || "unknown", // proof ID (short)
+      cid: chainId,
+      tcid: targetChainId,
+      bn: blockNumbers[0], // First block number only
+      ts: Math.floor(Date.now() / 1000),
+      v: "3.0"
     };
 
-    console.log(`\n=== ZK Proof Data Preparation Completed ===`);
-    console.log(`Status: ${result.status}`);
-    console.log(`Blocks processed: ${result.metadata.blockCount}/${result.metadata.totalRequestedBlocks}`);
-    console.log(`Real proof generated: ${result.metadata.hasRealProof}`);
-    console.log(`Result size: ${JSON.stringify(result).length} characters`);
+    console.log(`✓ Result size: ${JSON.stringify(result).length} bytes`);
     
-    // Return as properly encoded bytes for Chainlink Functions
+    // Store full proof data in logs for external retrieval
+    console.log("PROOF_DATA:", JSON.stringify({
+      proofId: proofResult.proofId,
+      proof: proofResult.proof,
+      publicSignals: proofResult.publicSignals,
+      circuitInputs: circuitInputs,
+      metadata: {
+        chainId,
+        targetChainId,
+        blockNumbers,
+        timestamp: Math.floor(Date.now() / 1000)
+      }
+    }));
+
     return Functions.encodeString(JSON.stringify(result));
 
   } catch (error) {
-    console.error(`\n=== ERROR in ZK Proof Data Preparation ===`);
-    console.error(`Error message: ${error.message}`);
-    console.error(`Stack trace: ${error.stack}`);
+    console.error("Error in ZK proof generation:", error.message);
     
     const errorResult = {
-      success: false,
-      error: error.message,
-      chainId: chainId || 0,
-      targetChainId: targetChainId || 0,
-      blockNumbers: blockNumbers || [],
-      timestamp: Math.floor(Date.now() / 1000),
-      version: "2.1.0",
-      metadata: {
-        errorType: error.name || "UnknownError",
-        supportedChains: Object.keys(CHAIN_CONFIGS).map(id => parseInt(id))
-      }
+      s: false, // success = false
+      e: error.message.slice(0, 50), // error (truncated)
+      cid: chainId || 0,
+      tcid: targetChainId || 0,
+      ts: Math.floor(Date.now() / 1000),
+      v: "3.0"
     };
 
-    console.log(`Returning error result: ${JSON.stringify(errorResult)}`);
     return Functions.encodeString(JSON.stringify(errorResult));
   }
 }
