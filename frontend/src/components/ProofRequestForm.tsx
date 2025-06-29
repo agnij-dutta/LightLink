@@ -172,6 +172,7 @@ export function ProofRequestForm() {
                 <SelectItem value="arbitrum">Arbitrum</SelectItem>
                 <SelectItem value="optimism">Optimism</SelectItem>
                 <SelectItem value="base">Base</SelectItem>
+                <SelectItem value="avalanche">Avalanche</SelectItem>
                 <SelectItem value="sepolia">Sepolia Testnet</SelectItem>
               </SelectContent>
             </Select>

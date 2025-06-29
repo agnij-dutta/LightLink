@@ -9,6 +9,12 @@ import { useAccount, useContractRead, useContractReads, useWriteContract, useWai
 import { CONTRACT_ADDRESSES, ZK_PROOF_AGGREGATOR_ABI } from '@/constants/contracts';
 import { useZKProofService } from '@/hooks/useZKProofService';
 import { toast } from './ui/Toast';
+import { 
+  EthereumIcon,
+  ArbitrumIcon,
+  OptimismIcon,
+  AvalancheIcon
+} from '../../icons/chain-icons';
 
 export function NovaFoldingForm() {
   const { address } = useAccount();
@@ -36,7 +42,6 @@ export function NovaFoldingForm() {
         healthStatus === 'error' ? 'error' :
         healthStatus ? healthStatus : 'offline'
       );
-      console.log('DEBUG: ZK Service Status:', status);
     };
     checkStatus();
   }, [checkServiceHealth]);
@@ -55,19 +60,11 @@ export function NovaFoldingForm() {
     functionName: 'requestCounter',
   });
 
-  console.log('DEBUG Nova: Nova Contract Address:', CONTRACT_ADDRESSES.NOVA_PROOF_AGGREGATOR);
-  console.log('DEBUG Nova: ZK Contract Address:', CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR);
-  console.log('DEBUG Nova: Nova Request Counter:', requestCounter);
-  console.log('DEBUG Nova: ZK Request Counter:', zkRequestCounter);
-
   // Use base ZK contract for reading proofs since Nova contract appears to be empty
   const effectiveRequestCounter = requestCounter && Number(requestCounter) > 0 ? requestCounter : zkRequestCounter;
   const effectiveContractAddress = requestCounter && Number(requestCounter) > 0 
     ? CONTRACT_ADDRESSES.NOVA_PROOF_AGGREGATOR 
     : CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR;
-
-  console.log('DEBUG Nova: Using contract:', effectiveContractAddress);
-  console.log('DEBUG Nova: Effective request counter:', effectiveRequestCounter);
 
   // Fetch all proof requests for the user
   const proofRequestIds = effectiveRequestCounter ? Array.from({ length: Number(effectiveRequestCounter) }, (_, i) => BigInt(i + 1)) : [];
@@ -82,26 +79,20 @@ export function NovaFoldingForm() {
     })),
   });
 
-  console.log('DEBUG Nova: Proof Requests Raw:', proofRequests);
-
   // Filter completed proofs for the user
   let completedProofs: Array<{ id: number; sourceChain: string; blockNumber: bigint; stateRoot: string; timestamp: number }> = [];
   if (Array.isArray(proofRequests) && address) {
-    console.log('DEBUG Nova: Processing proof requests for address:', address);
     
     completedProofs = proofRequests
       .map((result, idx) => {
         if (!result || !result.result) {
-          console.log(`DEBUG Nova: No result for index ${idx}`, result);
           return null;
         }
         
         // Fix: Ensure result.result is properly handled as an object with properties
         const proofData = result.result as any;
-        console.log(`DEBUG Nova: Proof data for index ${idx}:`, proofData);
         
         if (!proofData || typeof proofData !== 'object') {
-          console.log(`DEBUG Nova: Invalid proof data for index ${idx}`);
           return null;
         }
         
@@ -121,24 +112,10 @@ export function NovaFoldingForm() {
         const isValid = typeof proofData.isValid === 'boolean' ? proofData.isValid : 
                        (typeof proofData[6] === 'boolean' ? proofData[6] : false);
         
-        console.log(`DEBUG Nova: Extracted data for proof ${idx}:`, {
-          requester,
-          timestamp,
-          sourceChain,
-          blockNumber,
-          stateRoot,
-          isCompleted,
-          isValid
-        });
         
         if (!requester) {
-          console.log(`DEBUG Nova: Requester is null or undefined for proof ${idx}`);
           return null;
         }
-        
-        console.log(`DEBUG Nova: Proof ${idx} - Requester: ${requester}, User address: ${address}`);
-        console.log(`DEBUG Nova: Addresses match?`, requester.toLowerCase() === address.toLowerCase());
-        console.log(`DEBUG Nova: Completed: ${isCompleted}, Valid: ${isValid}`);
         
         // Filter proofs by requester (show only user's proofs)
         if (requester.toLowerCase() !== address.toLowerCase()) return null;
@@ -158,8 +135,6 @@ export function NovaFoldingForm() {
       })
       .filter((x): x is { id: number; sourceChain: string; blockNumber: bigint; stateRoot: string; timestamp: number } => x !== null);
   }
-
-  console.log('DEBUG Nova: Filtered completed proofs:', completedProofs);
 
   const handleSelect = (id: number) => {
     setSelectedProofIds((prev) =>
@@ -193,12 +168,28 @@ export function NovaFoldingForm() {
 
   const getChainIcon = (chain: string) => {
     const chainLower = chain.toLowerCase();
-    if (chainLower.includes('polygon')) return '🔷';
-    if (chainLower.includes('ethereum')) return '⟠';
-    if (chainLower.includes('sepolia')) return '🔹';
-    if (chainLower.includes('arbitrum')) return '🔵';
-    if (chainLower.includes('optimism')) return '🔴';
-    return '⚡';
+    const iconClass = "w-6 h-6";
+
+    if (chainLower.includes('ethereum') || chainLower.includes('sepolia')) {
+      return <EthereumIcon className={iconClass} />;
+    }
+    if (chainLower.includes('arbitrum')) {
+      return <ArbitrumIcon className={iconClass} />;
+    }
+    if (chainLower.includes('optimism')) {
+      return <OptimismIcon className={iconClass} />;
+    }
+    if (chainLower.includes('avalanche')) {
+      return <AvalancheIcon className={iconClass} />;
+    }
+    if (chainLower.includes('base')) {
+      return <ArbitrumIcon className={iconClass} />; // Placeholder for Base
+    }
+    if (chainLower.includes('polygon')) {
+      return <div className="w-6 h-6 bg-purple-500 rounded" title="Polygon">🔷</div>;
+    }
+
+    return <div className="w-6 h-6 bg-gray-400 rounded-full" title="Unknown Chain" />;
   };
 
   const startNovaFolding = async () => {
@@ -214,10 +205,6 @@ export function NovaFoldingForm() {
     const contractAddress = CONTRACT_ADDRESSES.NOVA_PROOF_AGGREGATOR;
     
     try {
-      console.log('DEBUG Nova: Starting Nova folding with IDs:', selectedProofIds);
-      console.log('DEBUG Nova: Contract Address:', contractAddress);
-      console.log('DEBUG Nova: Contract Address Set?', !!contractAddress);
-      console.log('DEBUG Nova: Selected proof count:', selectedProofIds.length);
       
       // Validate proofs before submitting transaction
       const validationResults = selectedProofIds.map(id => {
@@ -228,10 +215,8 @@ export function NovaFoldingForm() {
           data: proof
         };
       });
-      console.log('DEBUG Nova: Proof validation results:', validationResults);
       
       const proofIdsBigInt = selectedProofIds.map(id => BigInt(id));
-      console.log('DEBUG Nova: Proof IDs as BigInt:', proofIdsBigInt);
       
       if (!contractAddress) {
         throw new Error('NOVA_PROOF_AGGREGATOR address not configured');
@@ -245,9 +230,7 @@ export function NovaFoldingForm() {
         gas: BigInt(1500000),
       });
       
-      console.log('DEBUG Nova: Transaction submitted successfully');
     } catch (error) {
-      console.error('Error starting Nova folding:', error);
       setIsSubmitting(false);
       // Error handling is now done in useEffect hooks
     }
@@ -256,7 +239,6 @@ export function NovaFoldingForm() {
   // Reset selection after successful confirmation
   useEffect(() => {
     if (isConfirmed) {
-      console.log('DEBUG Nova: Transaction confirmed, resetting selection');
       setSelectedProofIds([]);
       setTxError(null); // Clear any previous errors
       setIsSubmitting(false);
@@ -272,7 +254,6 @@ export function NovaFoldingForm() {
   // Monitor for transaction receipt errors (reverts)
   useEffect(() => {
     if (receiptError) {
-      console.error('Transaction reverted:', receiptError);
       
       // Extract revert reason from error
       let errorMessage = 'Transaction failed';
@@ -307,7 +288,6 @@ export function NovaFoldingForm() {
   // Monitor for contract write errors
   useEffect(() => {
     if (error) {
-      console.error('Contract write error:', error);
       let errorMessage = 'Failed to submit transaction';
       
       if (error.message) {
