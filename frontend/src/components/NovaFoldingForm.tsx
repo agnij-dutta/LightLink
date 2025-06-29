@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/Card';
 import { Button } from './ui/Button';
-import { GitBranch, Play, Loader2 } from 'lucide-react';
+import { Badge } from './ui/Badge';
+import { GitBranch, Play, Loader2, Check, Clock, Hash, ChevronRight, CheckSquare, Square, AlertTriangle } from 'lucide-react';
 import { useAccount, useContractRead, useContractReads, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { CONTRACT_ADDRESSES, ZK_PROOF_AGGREGATOR_ABI } from '@/constants/contracts';
 import { useZKProofService } from '@/hooks/useZKProofService';
@@ -26,7 +27,13 @@ export function NovaFoldingForm() {
   useEffect(() => {
     const checkStatus = async () => {
       const status = await checkServiceHealth();
-      setServiceStatus(status?.status || 'offline');
+      // Backend returns 'ready' when service is healthy, map it to user-friendly status
+      const healthStatus = status?.status;
+      setServiceStatus(
+        healthStatus === 'ready' ? 'online' : 
+        healthStatus === 'error' ? 'error' :
+        healthStatus ? healthStatus : 'offline'
+      );
       console.log('DEBUG: ZK Service Status:', status);
     };
     checkStatus();
@@ -116,6 +123,7 @@ export function NovaFoldingForm() {
         // Filter proofs by requester (show only user's proofs)
         if (requester.toLowerCase() !== address.toLowerCase()) return null;
         
+        // Only show completed AND valid proofs for Nova folding
         if (!isCompleted || !isValid) {
           return null;
         }
@@ -139,33 +147,82 @@ export function NovaFoldingForm() {
     );
   };
 
+  const selectAll = () => {
+    setSelectedProofIds(completedProofs.map(proof => proof.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedProofIds([]);
+  };
+
+  const truncateHash = (hash: string) => {
+    return `${hash.slice(0, 10)}...${hash.slice(-8)}`;
+  };
+
+  const formatTimestamp = (timestamp: number) => {
+    // Handle both seconds and milliseconds timestamps
+    const date = new Date(timestamp > 1000000000000 ? timestamp : timestamp * 1000);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getChainIcon = (chain: string) => {
+    const chainLower = chain.toLowerCase();
+    if (chainLower.includes('polygon')) return '🔷';
+    if (chainLower.includes('ethereum')) return '⟠';
+    if (chainLower.includes('sepolia')) return '🔹';
+    if (chainLower.includes('arbitrum')) return '🔵';
+    if (chainLower.includes('optimism')) return '🔴';
+    return '⚡';
+  };
+
   const startNovaFolding = async () => {
-    if (selectedProofIds.length === 0) return;
+    if (selectedProofIds.length < 2) {
+      return;
+    }
     
     setIsSubmitting(true);
     try {
       console.log('DEBUG Nova: Starting Nova folding with IDs:', selectedProofIds);
+      console.log('DEBUG Nova: Contract Address:', CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR);
+      
+      const proofIdsBigInt = selectedProofIds.map(id => BigInt(id));
+      console.log('DEBUG Nova: Proof IDs as BigInt:', proofIdsBigInt);
+      
       await writeContract({
         address: CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR,
         abi: ZK_PROOF_AGGREGATOR_ABI,
         functionName: 'startNovaFolding',
-        args: [selectedProofIds.map(id => BigInt(id))],
+        args: [proofIdsBigInt],
+        // Add explicit gas limit to prevent out of gas errors
+        gas: BigInt(500000),
       });
       
-      // Reset selection after successful submission
-      if (isConfirmed) {
-        setSelectedProofIds([]);
-        refetchProofs();
-      }
+      console.log('DEBUG Nova: Transaction submitted successfully');
     } catch (error) {
       console.error('Error starting Nova folding:', error);
+      console.error('Error details:', error.message || error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Reset selection after successful confirmation
+  useEffect(() => {
+    if (isConfirmed) {
+      console.log('DEBUG Nova: Transaction confirmed, resetting selection');
+      setSelectedProofIds([]);
+      refetchProofs();
+    }
+  }, [isConfirmed, refetchProofs]);
+
   return (
-    <Card className="max-w-2xl mx-auto">
+    <Card className="max-w-4xl mx-auto">
       <CardHeader>
         <div className="flex items-center justify-between">
         <CardTitle className="flex items-center space-x-2">
@@ -175,8 +232,9 @@ export function NovaFoldingForm() {
           <div className="text-xs font-mono">
             Service: 
             <span className={
-              serviceStatus === 'running' ? 'text-green-500' : 
-              serviceStatus === 'offline' ? 'text-red-500' : 'text-yellow-500'
+              serviceStatus === 'online' ? 'text-green-500' : 
+              serviceStatus === 'offline' ? 'text-red-500' : 
+              serviceStatus === 'error' ? 'text-red-500' : 'text-yellow-500'
             }> {serviceStatus}</span>
           </div>
         </div>
@@ -186,15 +244,28 @@ export function NovaFoldingForm() {
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
-          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
-            <h4 className="font-semibold text-purple-900 dark:text-purple-100 mb-2">
+          <div className="bg-purple-500/10 border border-purple-400/30 rounded-xl p-5 backdrop-blur-sm shadow-lg shadow-purple-500/10">
+            <h4 className="font-semibold text-purple-200 mb-3 flex items-center">
+              <GitBranch className="w-4 h-4 mr-2" />
               Nova Folding Process:
             </h4>
-            <ul className="text-sm text-purple-700 dark:text-purple-300 space-y-1">
-              <li>• Selected proofs are combined using Nova's folding scheme</li>
-              <li>• Recursive instance is created with aggregated state</li>
-              <li>• Verification time becomes constant regardless of proof count</li>
-              <li>• Continue folding to increase recursion depth</li>
+            <ul className="text-sm text-purple-100/90 space-y-2">
+              <li className="flex items-start">
+                <span className="text-purple-300 mr-2">•</span>
+                <span>Selected proofs are combined using Nova's folding scheme</span>
+              </li>
+              <li className="flex items-start">
+                <span className="text-purple-300 mr-2">•</span>
+                <span>Recursive instance is created with aggregated state</span>
+              </li>
+              <li className="flex items-start">
+                <span className="text-purple-300 mr-2">•</span>
+                <span>Verification time becomes constant regardless of proof count</span>
+              </li>
+              <li className="flex items-start">
+                <span className="text-purple-300 mr-2">•</span>
+                <span>Continue folding to increase recursion depth</span>
+              </li>
             </ul>
           </div>
 
@@ -208,49 +279,168 @@ export function NovaFoldingForm() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="mb-4">
-                <p className="font-medium mb-2">Select proofs to fold:</p>
-                <ul className="space-y-2">
-                  {completedProofs.map((proof: any) => (
-                    <li key={proof.id} className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedProofIds.includes(proof.id)}
-                        onChange={() => handleSelect(proof.id)}
-                        className="form-checkbox h-4 w-4 text-purple-600"
-                      />
-                      <span className="font-mono text-xs">Proof #{proof.id} | Block: {typeof proof.blockNumber === 'bigint' ? proof.blockNumber.toString() : String(proof.blockNumber)} | Chain: {proof.sourceChain}</span>
-                    </li>
-                  ))}
-                </ul>
+              {/* Selection Controls */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <h3 className="font-medium text-lg">Select proofs to fold:</h3>
+                  <Badge variant="outline" className="text-xs">
+                    {selectedProofIds.length} of {completedProofs.length} selected
+                  </Badge>
+                  <span className="text-xs text-gray-500 italic">(minimum 2 required)</span>
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAll}
+                    disabled={selectedProofIds.length === completedProofs.length}
+                    className="text-xs"
+                  >
+                    <CheckSquare className="w-3 h-3 mr-1" />
+                    Select All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearSelection}
+                    disabled={selectedProofIds.length === 0}
+                    className="text-xs"
+                  >
+                    <Square className="w-3 h-3 mr-1" />
+                    Clear
+                  </Button>
+                </div>
               </div>
-              <Button 
-                disabled={selectedProofIds.length === 0 || isSubmitting || isPending || isConfirming} 
-                className="w-full"
-                onClick={startNovaFolding}
-              >
-                {isSubmitting || isPending || isConfirming ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {isPending || isSubmitting ? 'Processing...' : 'Confirming...'}
-                  </>
-                ) : (
-                  <>
-                <Play className="w-4 h-4 mr-2" />
-                Start Nova Folding
-                  </>
+
+              {/* Proof Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {completedProofs.map((proof) => {
+                  const isSelected = selectedProofIds.includes(proof.id);
+                  return (
+                    <div
+                      key={proof.id}
+                      onClick={() => handleSelect(proof.id)}
+                      className={`
+                        relative p-5 rounded-xl border cursor-pointer transition-all duration-200 backdrop-blur-sm
+                        ${isSelected 
+                          ? 'border-purple-400/60 bg-purple-500/10 shadow-lg shadow-purple-500/20 ring-1 ring-purple-400/30' 
+                          : 'border-gray-500/30 bg-gray-900/40 hover:border-purple-400/40 hover:bg-purple-500/5 hover:shadow-md hover:shadow-purple-500/10'
+                        }
+                      `}
+                    >
+                      {/* Selection Indicator */}
+                      <div className="absolute top-4 right-4">
+                        {isSelected ? (
+                          <div className="w-6 h-6 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/30">
+                            <Check className="w-4 h-4 text-white" />
+                          </div>
+                        ) : (
+                          <div className="w-6 h-6 border border-gray-400/50 rounded-full bg-gray-800/30 backdrop-blur-sm" />
+                        )}
+                      </div>
+
+                      {/* Proof Header */}
+                      <div className="mb-4 pr-8">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <Badge variant="outline" className="text-xs font-mono font-semibold">
+                            Proof #{proof.id}
+                          </Badge>
+                          <Badge className="bg-green-500/20 text-green-300 text-xs border-green-400/30 backdrop-blur-sm">
+                            <Check className="w-3 h-3 mr-1" />
+                            Verified
+                          </Badge>
+                        </div>
+                      </div>
+
+                      {/* Proof Details */}
+                      <div className="space-y-4 text-sm">
+                        {/* Chain and Block */}
+                                                  <div className="flex items-center space-x-3">
+                            <div className="text-2xl">{getChainIcon(proof.sourceChain)}</div>
+                            <div className="flex-1">
+                              <p className="font-semibold capitalize text-gray-100">
+                                {proof.sourceChain}
+                              </p>
+                              <p className="text-xs text-gray-400 font-mono">
+                                Block: {proof.blockNumber.toString()}
+                              </p>
+                            </div>
+                          </div>
+
+                                                  {/* State Root */}
+                          <div className="space-y-2">
+                            <div className="flex items-center space-x-1">
+                              <Hash className="w-4 h-4 text-purple-400" />
+                              <span className="text-xs font-medium text-gray-300">State Root</span>
+                            </div>
+                            <div className="bg-gray-800/60 border border-gray-600/40 rounded-lg p-3 backdrop-blur-sm">
+                              <p className="font-mono text-xs text-gray-200 break-all leading-relaxed">
+                                {truncateHash(proof.stateRoot)}
+                              </p>
+                            </div>
+                          </div>
+
+                                                  {/* Timestamp */}
+                          <div className="flex items-center space-x-2 pt-2 border-t border-gray-600/30">
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <span className="text-xs text-gray-400">
+                              {formatTimestamp(proof.timestamp)}
+                            </span>
+                          </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Folding Button */}
+              <div className="pt-4">
+                {selectedProofIds.length > 0 && selectedProofIds.length < 2 && (
+                  <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-400/30 rounded-lg backdrop-blur-sm">
+                    <p className="text-yellow-300 text-sm flex items-center">
+                      <AlertTriangle className="w-4 h-4 mr-2" />
+                      Please select at least 2 proofs to start Nova folding
+                    </p>
+                  </div>
                 )}
-              </Button>
+                
+                <Button 
+                  disabled={selectedProofIds.length < 2 || isSubmitting || isPending || isConfirming} 
+                  className="w-full h-12 text-base"
+                  onClick={startNovaFolding}
+                >
+                  {isSubmitting || isPending || isConfirming ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      {isPending || isSubmitting ? 'Processing Transaction...' : 'Confirming...'}
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-5 h-5 mr-2" />
+                      {selectedProofIds.length < 2 
+                        ? `Select ${2 - selectedProofIds.length} more proof${2 - selectedProofIds.length === 1 ? '' : 's'} to start`
+                        : `Start Nova Folding (${selectedProofIds.length} proof${selectedProofIds.length !== 1 ? 's' : ''})`
+                      }
+                      {selectedProofIds.length >= 2 && <ChevronRight className="w-4 h-4 ml-2" />}
+                    </>
+                  )}
+                </Button>
+              </div>
               
+              {/* Status Messages */}
               {error && (
-                <div className="text-red-500 text-sm mt-2">
-                  Error: {error.message || 'Failed to start Nova folding'}
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <div className="text-red-600 dark:text-red-400 text-sm">
+                    <strong>Error:</strong> {error.message || 'Failed to start Nova folding'}
+                  </div>
                 </div>
               )}
               
               {isConfirmed && (
-                <div className="text-green-500 text-sm mt-2">
-                  Nova folding started successfully!
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                  <div className="text-green-600 dark:text-green-400 text-sm">
+                    <strong>Success:</strong> Nova folding started successfully!
+                  </div>
                 </div>
               )}
             </div>

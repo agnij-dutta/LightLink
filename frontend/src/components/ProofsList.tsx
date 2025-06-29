@@ -172,7 +172,15 @@ export function ProofsList() {
   };
 
   const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
+    // Handle both seconds and milliseconds timestamps
+    const date = new Date(timestamp > 1000000000000 ? timestamp : timestamp * 1000);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const openTransaction = (txHash: string) => {

@@ -141,10 +141,10 @@ export function ProofRequestForm() {
         </CardTitle>
           {serviceStatus && (
             <Badge 
-              variant={serviceStatus.status === 'running' ? 'outline' : 'destructive'} 
+              variant={serviceStatus.status === 'ready' ? 'outline' : 'destructive'} 
               className="text-xs"
             >
-              {serviceStatus.status === 'running' ? 'Service Online' : 'Service Offline'}
+              {serviceStatus.status === 'ready' ? 'Service Online' : 'Service Offline'}
             </Badge>
           )}
         </div>
