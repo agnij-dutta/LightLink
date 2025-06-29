@@ -53,6 +53,9 @@ contract NovaProofAggregator is ZKProofAggregator {
     // Nova circuit verifier (would be deployed separately)
     address public novaVerifier;
     
+    // Reference to the base ZK proof aggregator contract for reading existing proofs
+    ZKProofAggregator public immutable baseZKContract;
+    
     modifier validBatch(uint256 batchId) {
         require(batchId > 0 && batchId <= batchCounter, "Invalid batch ID");
         _;
@@ -71,7 +74,8 @@ contract NovaProofAggregator is ZKProofAggregator {
         uint64 functionsSubscriptionId,
         bytes32 functionsDonId,
         address groth16VerifierAddress,
-        address _novaVerifier
+        address _novaVerifier,
+        address _baseZKContract
     ) ZKProofAggregator(
         vrfCoordinator,
         functionsRouter,
@@ -82,6 +86,7 @@ contract NovaProofAggregator is ZKProofAggregator {
         groth16VerifierAddress
     ) {
         novaVerifier = _novaVerifier;
+        baseZKContract = ZKProofAggregator(_baseZKContract);
     }
     
     /**
@@ -98,10 +103,13 @@ contract NovaProofAggregator is ZKProofAggregator {
             "Invalid proof count"
         );
         
-        // Verify all proofs exist and are completed
+        // Verify all proofs exist and are completed (read from base ZK contract)
         for (uint256 i = 0; i < proofIds.length; i++) {
-            require(proofRequests[proofIds[i]].isCompleted, "Proof not completed");
-            require(proofRequests[proofIds[i]].isValid, "Invalid proof");
+            // Get proof data from base ZK contract
+            ProofRequest memory proof = baseZKContract.getProofRequest(proofIds[i]);
+            
+            require(proof.isCompleted, "Proof not completed");
+            require(proof.isValid, "Invalid proof");
             require(proofToBatch[proofIds[i]] == 0, "Proof already in batch");
         }
         
@@ -114,25 +122,28 @@ contract NovaProofAggregator is ZKProofAggregator {
         batch.recursionDepth = 0;
         batch.isCompleted = false;
         
-        // Store proof hashes and public inputs
+        // Store proof hashes and public inputs (read from base ZK contract)
         for (uint256 i = 0; i < proofIds.length; i++) {
             uint256 proofId = proofIds[i];
             proofToBatch[proofId] = batchId;
             
+            // Get proof data from base ZK contract
+            ProofRequest memory proof = baseZKContract.getProofRequest(proofId);
+            
             // Generate proof hash from state root and block number
             batch.proofHashes[i] = keccak256(
                 abi.encodePacked(
-                    proofRequests[proofId].stateRoot,
-                    proofRequests[proofId].blockNumber,
-                    proofRequests[proofId].sourceChain
+                    proof.stateRoot,
+                    proof.blockNumber,
+                    proof.sourceChain
                 )
             );
             
             // Store public inputs (simplified for demo)
             batch.publicInputs[i] = [
-                uint256(proofRequests[proofId].stateRoot),
-                proofRequests[proofId].blockNumber,
-                uint256(keccak256(bytes(proofRequests[proofId].sourceChain))),
+                uint256(proof.stateRoot),
+                proof.blockNumber,
+                uint256(keccak256(bytes(proof.sourceChain))),
                 block.timestamp
             ];
         }
@@ -153,31 +164,14 @@ contract NovaProofAggregator is ZKProofAggregator {
         
         // Enhanced JavaScript source for Nova folding
         string memory source = string(abi.encodePacked(
-            "const batchId = parseInt(args[0]);",
-            "const proofCount = parseInt(args[1]);",
-            "const stepIn = parseInt(args[2]);",
-            "// Generate Nova recursive proof - simplified for demo",
-            "const aggregatedHash = ethers.utils.keccak256(",
-            "  ethers.utils.defaultAbiCoder.encode(",
-            "    ['uint256', 'uint256', 'uint256'],",
-            "    [batchId, proofCount, stepIn]",
-            "  )",
-            ");",
-            "const foldedInstance = {",
-            "  stepIn: stepIn,",
-            "  stepOut: stepIn + 1,",
-            "  programCounter: Date.now(),",
-            "  stateRootIn: aggregatedHash,",
-            "  stateRootOut: aggregatedHash,",
-            "  nullifierHash: ethers.utils.keccak256(aggregatedHash),",
-            "  isValid: true",
-            "};",
-            "return Functions.encodeString(JSON.stringify({",
-            "  batchId: batchId,",
-            "  aggregatedHash: aggregatedHash,",
-            "  foldedInstance: foldedInstance,",
-            "  recursiveProof: aggregatedHash",
-            "}));"
+            "// Nova folding: compute deterministic aggregatedHash and return as string\n",
+            "const batchId = BigInt(args[0]);\n",
+            "const proofCount = BigInt(args[1]);\n",
+            "const stepIn = BigInt(args[2]);\n",
+            "// Simple deterministic 32-byte hex hash without ethers.js\n",
+            "function simpleHash(str){let h1=0,h2=0;for(let i=0;i<str.length;i++){const ch=str.charCodeAt(i);h1=((h1<<5)-h1+ch)|0;h2=((h2<<3)+ch*7)|0;}const toHex=v=>((v>>>0).toString(16).padStart(8,'0'));return '0x'+toHex(h1)+toHex(h2)+toHex(h1^h2)+toHex((h1+h2)*13);}\n",
+            "const aggregatedHash = simpleHash(batchId.toString()+','+proofCount.toString()+','+stepIn.toString());\n",
+            "return Functions.encodeString(aggregatedHash);"
         ));
 
         // Use the parent contract's helper to send Functions request

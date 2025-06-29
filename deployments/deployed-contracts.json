@@ -13,7 +13,10 @@
     "groth16Verifier": "0xf9328281A7881F75154d3B626dc6beE24a391470",
     "zkProofAggregator": "0xb8924280E730AC650191203BefdC867034f07b51",
     "crossChainVerifier": "0x6A920B5F0c3fF6263dA75186B51254396e9e26b1",
-    "deployedAt": "2025-06-29T15:57:20.037Z",
-    "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449"
+    "deployedAt": "2025-06-29T19:59:50.682Z",
+    "deployer": "0xe87758C6CCcf3806C9f1f0C8F99f6Dcae36E5449",
+    "novaProofAggregator": "0x2fc6F9Dfff1E02CCB7a93699e5f6346e35E263A1",
+    "network": "avalancheFuji",
+    "chainId": 43113
   }
 }

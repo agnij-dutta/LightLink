@@ -8,15 +8,17 @@ import { GitBranch, Play, Loader2, Check, Clock, Hash, ChevronRight, CheckSquare
 import { useAccount, useContractRead, useContractReads, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { CONTRACT_ADDRESSES, ZK_PROOF_AGGREGATOR_ABI } from '@/constants/contracts';
 import { useZKProofService } from '@/hooks/useZKProofService';
+import { toast } from './ui/Toast';
 
 export function NovaFoldingForm() {
   const { address } = useAccount();
   const [selectedProofIds, setSelectedProofIds] = useState<number[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<string>('unknown');
+  const [txError, setTxError] = useState<string | null>(null);
 
   const { writeContract, data: hash, error, isPending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = 
+  const { isLoading: isConfirming, isSuccess: isConfirmed, error: receiptError } = 
     useWaitForTransactionReceipt({
       hash,
     });
@@ -39,23 +41,41 @@ export function NovaFoldingForm() {
     checkStatus();
   }, [checkServiceHealth]);
 
-  // Fetch the total number of proof requests
+  // Fetch the total number of proof requests from Nova contract
   const { data: requestCounter } = useContractRead({
+    address: CONTRACT_ADDRESSES.NOVA_PROOF_AGGREGATOR,
+    abi: ZK_PROOF_AGGREGATOR_ABI,
+    functionName: 'requestCounter',
+  });
+
+  // Also fetch from base ZK contract for comparison
+  const { data: zkRequestCounter } = useContractRead({
     address: CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR,
     abi: ZK_PROOF_AGGREGATOR_ABI,
     functionName: 'requestCounter',
   });
 
-  console.log('DEBUG Nova: Contract Address:', CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR);
-  console.log('DEBUG Nova: Request Counter:', requestCounter);
+  console.log('DEBUG Nova: Nova Contract Address:', CONTRACT_ADDRESSES.NOVA_PROOF_AGGREGATOR);
+  console.log('DEBUG Nova: ZK Contract Address:', CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR);
+  console.log('DEBUG Nova: Nova Request Counter:', requestCounter);
+  console.log('DEBUG Nova: ZK Request Counter:', zkRequestCounter);
+
+  // Use base ZK contract for reading proofs since Nova contract appears to be empty
+  const effectiveRequestCounter = requestCounter && Number(requestCounter) > 0 ? requestCounter : zkRequestCounter;
+  const effectiveContractAddress = requestCounter && Number(requestCounter) > 0 
+    ? CONTRACT_ADDRESSES.NOVA_PROOF_AGGREGATOR 
+    : CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR;
+
+  console.log('DEBUG Nova: Using contract:', effectiveContractAddress);
+  console.log('DEBUG Nova: Effective request counter:', effectiveRequestCounter);
 
   // Fetch all proof requests for the user
-  const proofRequestIds = requestCounter ? Array.from({ length: Number(requestCounter) }, (_, i) => BigInt(i + 1)) : [];
+  const proofRequestIds = effectiveRequestCounter ? Array.from({ length: Number(effectiveRequestCounter) }, (_, i) => BigInt(i + 1)) : [];
   
   
   const { data: proofRequests, refetch: refetchProofs } = useContractReads({
     contracts: proofRequestIds.map((id) => ({
-      address: CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR,
+      address: effectiveContractAddress,
       abi: ZK_PROOF_AGGREGATOR_ABI,
       functionName: 'getProofRequest',
       args: [id],
@@ -186,29 +206,50 @@ export function NovaFoldingForm() {
       return;
     }
     
+    // Clear any previous errors
+    setTxError(null);
     setIsSubmitting(true);
+    
+    // Always use Nova contract for writes, even if reading from ZK contract
+    const contractAddress = CONTRACT_ADDRESSES.NOVA_PROOF_AGGREGATOR;
+    
     try {
       console.log('DEBUG Nova: Starting Nova folding with IDs:', selectedProofIds);
-      console.log('DEBUG Nova: Contract Address:', CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR);
+      console.log('DEBUG Nova: Contract Address:', contractAddress);
+      console.log('DEBUG Nova: Contract Address Set?', !!contractAddress);
+      console.log('DEBUG Nova: Selected proof count:', selectedProofIds.length);
+      
+      // Validate proofs before submitting transaction
+      const validationResults = selectedProofIds.map(id => {
+        const proof = completedProofs.find(p => p.id === id);
+        return {
+          id,
+          exists: !!proof,
+          data: proof
+        };
+      });
+      console.log('DEBUG Nova: Proof validation results:', validationResults);
       
       const proofIdsBigInt = selectedProofIds.map(id => BigInt(id));
       console.log('DEBUG Nova: Proof IDs as BigInt:', proofIdsBigInt);
       
-      await writeContract({
-        address: CONTRACT_ADDRESSES.ZK_PROOF_AGGREGATOR,
+      if (!contractAddress) {
+        throw new Error('NOVA_PROOF_AGGREGATOR address not configured');
+      }
+      
+      writeContract({
+        address: contractAddress,
         abi: ZK_PROOF_AGGREGATOR_ABI,
         functionName: 'startNovaFolding',
         args: [proofIdsBigInt],
-        // Add explicit gas limit to prevent out of gas errors
-        gas: BigInt(500000),
+        gas: BigInt(1500000),
       });
       
       console.log('DEBUG Nova: Transaction submitted successfully');
     } catch (error) {
       console.error('Error starting Nova folding:', error);
-      console.error('Error details:', error instanceof Error ? error.message : String(error));
-    } finally {
       setIsSubmitting(false);
+      // Error handling is now done in useEffect hooks
     }
   };
 
@@ -217,9 +258,77 @@ export function NovaFoldingForm() {
     if (isConfirmed) {
       console.log('DEBUG Nova: Transaction confirmed, resetting selection');
       setSelectedProofIds([]);
+      setTxError(null); // Clear any previous errors
+      setIsSubmitting(false);
       refetchProofs();
+      toast({ 
+        title: 'Success!', 
+        description: 'Nova folding started successfully', 
+        variant: 'default' 
+      });
     }
   }, [isConfirmed, refetchProofs]);
+
+  // Monitor for transaction receipt errors (reverts)
+  useEffect(() => {
+    if (receiptError) {
+      console.error('Transaction reverted:', receiptError);
+      
+      // Extract revert reason from error
+      let errorMessage = 'Transaction failed';
+      if (receiptError.message) {
+        if (receiptError.message.includes('Invalid proof count')) {
+          errorMessage = 'Invalid proof count - must select 2-8 proofs';
+        } else if (receiptError.message.includes('Proof not completed')) {
+          errorMessage = 'One or more proofs are not completed yet';
+        } else if (receiptError.message.includes('Invalid proof')) {
+          errorMessage = 'One or more proofs are invalid';
+        } else if (receiptError.message.includes('Proof already in batch')) {
+          errorMessage = 'One or more proofs are already used in another batch';
+        } else if (receiptError.message.includes('execution reverted')) {
+          // Extract custom error message
+          const match = receiptError.message.match(/execution reverted:?\s*(.+)/i);
+          errorMessage = match ? match[1].trim() : 'Transaction execution reverted';
+        } else {
+          errorMessage = receiptError.message;
+        }
+      }
+      
+      setTxError(errorMessage);
+      toast({ 
+        title: 'Transaction Failed', 
+        description: errorMessage, 
+        variant: 'destructive' 
+      });
+      setIsSubmitting(false);
+    }
+  }, [receiptError]);
+
+  // Monitor for contract write errors
+  useEffect(() => {
+    if (error) {
+      console.error('Contract write error:', error);
+      let errorMessage = 'Failed to submit transaction';
+      
+      if (error.message) {
+        if (error.message.includes('User rejected')) {
+          errorMessage = 'Transaction was rejected';
+        } else if (error.message.includes('insufficient funds')) {
+          errorMessage = 'Insufficient funds for transaction';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setTxError(errorMessage);
+      toast({ 
+        title: 'Transaction Error', 
+        description: errorMessage, 
+        variant: 'destructive' 
+      });
+      setIsSubmitting(false);
+    }
+  }, [error]);
 
   return (
     <Card className="max-w-4xl mx-auto">
@@ -404,34 +513,34 @@ export function NovaFoldingForm() {
                   </div>
                 )}
                 
-                <Button 
+              <Button 
                   disabled={selectedProofIds.length < 2 || isSubmitting || isPending || isConfirming} 
                   className="w-full h-12 text-base"
-                  onClick={startNovaFolding}
-                >
-                  {isSubmitting || isPending || isConfirming ? (
-                    <>
+                onClick={startNovaFolding}
+              >
+                {isSubmitting || isPending || isConfirming ? (
+                  <>
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                       {isPending || isSubmitting ? 'Processing Transaction...' : 'Confirming...'}
-                    </>
-                  ) : (
-                    <>
+                  </>
+                ) : (
+                  <>
                       <Play className="w-5 h-5 mr-2" />
                       {selectedProofIds.length < 2 
                         ? `Select ${2 - selectedProofIds.length} more proof${2 - selectedProofIds.length === 1 ? '' : 's'} to start`
                         : `Start Nova Folding (${selectedProofIds.length} proof${selectedProofIds.length !== 1 ? 's' : ''})`
                       }
                       {selectedProofIds.length >= 2 && <ChevronRight className="w-4 h-4 ml-2" />}
-                    </>
-                  )}
-                </Button>
+                  </>
+                )}
+              </Button>
               </div>
               
               {/* Status Messages */}
-              {error && (
+              {txError && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
                   <div className="text-red-600 dark:text-red-400 text-sm">
-                    <strong>Error:</strong> {error.message || 'Failed to start Nova folding'}
+                    <strong>Error:</strong> {txError}
                   </div>
                 </div>
               )}
