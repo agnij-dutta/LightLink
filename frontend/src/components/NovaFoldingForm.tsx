@@ -206,7 +206,7 @@ export function NovaFoldingForm() {
       console.log('DEBUG Nova: Transaction submitted successfully');
     } catch (error) {
       console.error('Error starting Nova folding:', error);
-      console.error('Error details:', error.message || error);
+      console.error('Error details:', error instanceof Error ? error.message : String(error));
     } finally {
       setIsSubmitting(false);
     }
