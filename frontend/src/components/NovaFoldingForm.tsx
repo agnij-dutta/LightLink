@@ -43,8 +43,8 @@ export function NovaFoldingForm() {
   console.log('DEBUG Nova: Request Counter:', requestCounter);
 
   // Fetch all proof requests for the user
-  const proofRequestIds = requestCounter ? Array.from({ length: Number(requestCounter) }, (_, i) => BigInt(i)) : [];
-  console.log('DEBUG Nova: Proof Request IDs:', proofRequestIds);
+  const proofRequestIds = requestCounter ? Array.from({ length: Number(requestCounter) }, (_, i) => BigInt(i + 1)) : [];
+  
   
   const { data: proofRequests, refetch: refetchProofs } = useContractReads({
     contracts: proofRequestIds.map((id) => ({
@@ -113,16 +113,15 @@ export function NovaFoldingForm() {
         console.log(`DEBUG Nova: Addresses match?`, requester.toLowerCase() === address.toLowerCase());
         console.log(`DEBUG Nova: Completed: ${isCompleted}, Valid: ${isValid}`);
         
-        // Show all proofs for debugging
-        // if (requester.toLowerCase() !== address.toLowerCase()) return null;
+        // Filter proofs by requester (show only user's proofs)
+        if (requester.toLowerCase() !== address.toLowerCase()) return null;
         
         if (!isCompleted || !isValid) {
-          console.log(`DEBUG Nova: Proof ${idx} is not completed or not valid`);
           return null;
         }
         
         return {
-          id: idx,
+          id: idx + 1, // Use correct 1-based request ID
           sourceChain: String(sourceChain),
           blockNumber: BigInt(blockNumber),
           stateRoot: String(stateRoot),

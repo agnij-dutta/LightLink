@@ -43,8 +43,8 @@ export function ProofsList() {
     }
   });
 
-  // Fetch all proof requests for the user
-  const proofRequestIds = requestCounter ? Array.from({ length: Number(requestCounter) }, (_, i) => i) : [];
+  // Fetch all proof requests for the user (contract uses 1-based indexing)
+  const proofRequestIds = requestCounter ? Array.from({ length: Number(requestCounter) }, (_, i) => i + 1) : [];
   const {
     data: proofRequests,
     isLoading: isProofsLoading,
@@ -99,12 +99,12 @@ export function ProofsList() {
           return null;
         }
         
-        // Show all proofs regardless of requester for debugging
-        // if (requester.toLowerCase() !== address.toLowerCase()) return null;
+        // Filter proofs by requester (show only user's proofs)
+        if (requester.toLowerCase() !== address.toLowerCase()) return null;
         
         return {
-          id: idx.toString(),
-          requestId: idx.toString(),
+          id: (idx + 1).toString(), // Use correct 1-based request ID
+          requestId: (idx + 1).toString(), // Use correct 1-based request ID  
           requester,
           targetChain: sourceChain,
           blockHash: stateRoot,
@@ -208,9 +208,19 @@ export function ProofsList() {
             <Network className="w-5 h-5 text-primary" />
             <span>ZK Proof Requests</span>
           </CardTitle>
-          <Badge variant="outline" className="text-xs">
-            {proofs.length} Total
-          </Badge>
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => refetchProofs()}
+              className="text-xs"
+            >
+              Refresh
+            </Button>
+            <Badge variant="outline" className="text-xs">
+              {proofs.length} Total
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

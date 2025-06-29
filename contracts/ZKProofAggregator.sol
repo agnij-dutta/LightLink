@@ -256,56 +256,34 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
             return;
         }
 
-        // Parse JSON response from Functions
+        // Parse JSON response from Functions  
         string memory jsonResponse = string(response);
         
-        // Extract the result from JSON (simplified parsing)
-        bool success = _parseJsonBool(jsonResponse, "success");
+        // Extract the result from JSON (compact format: {"s":true,"pid":"0x...","cid":1,"tcid":43113,...})
+        bool success = _parseJsonBool(jsonResponse, "s"); // Parse "s" field for success
         
         ProofRequest storage request = proofRequests[proofRequestId];
         request.isCompleted = true;
         
         if (success) {
-            // Check if we received a real ZK proof
-            bool hasRealProof = _parseJsonBool(jsonResponse, "hasRealProof");
+            // Extract proof ID if available for state root generation
+            string memory proofId = _parseJsonString(jsonResponse, "pid");
             
-            if (hasRealProof) {
-                // Extract and verify real ZK proof
-                string memory proofData = _parseJsonString(jsonResponse, "proof");
-                string memory publicSignalsData = _parseJsonString(jsonResponse, "publicSignals");
-                
-                if (bytes(proofData).length > 0 && bytes(publicSignalsData).length > 0) {
-                    // For now, we trust the external verification since we can't easily parse JSON to proof format in Solidity
-                    // In production, you'd want to extract the proof components and verify on-chain
-                    bytes32 proofHash = keccak256(abi.encodePacked(proofData, publicSignalsData));
-                    
-                    request.isValid = true;
-                    request.stateRoot = proofHash;
-                    verifiedProofs[proofHash] = true;
-                    
-                    emit ProofVerified(proofRequestId, true, proofHash);
-                } else {
-                    // Fallback to validity hash if proof data is missing
-                    string memory validityHash = _parseJsonString(jsonResponse, "validityHash");
-                    bytes32 stateRoot = keccak256(abi.encodePacked(validityHash, block.timestamp));
-                    
-                    request.isValid = true;
-                    request.stateRoot = stateRoot;
-                    verifiedProofs[stateRoot] = true;
-                    
-                    emit ProofVerified(proofRequestId, true, stateRoot);
-                }
+            // Create a deterministic state root from the proof response
+            bytes32 stateRoot;
+            if (bytes(proofId).length > 0) {
+                // Use proof ID as basis for state root
+                stateRoot = keccak256(abi.encodePacked(proofId, block.timestamp, proofRequestId));
             } else {
-                // Handle prepared inputs case (no real proof generated)
-                string memory validityHash = _parseJsonString(jsonResponse, "validityHash");
-                bytes32 stateRoot = keccak256(abi.encodePacked(validityHash, block.timestamp));
-                
-                request.isValid = true;
-                request.stateRoot = stateRoot;
-                verifiedProofs[stateRoot] = true;
-                
-                emit ProofVerified(proofRequestId, true, stateRoot);
+                // Fallback state root generation
+                stateRoot = keccak256(abi.encodePacked(jsonResponse, block.timestamp, proofRequestId));
             }
+            
+            request.isValid = true;
+            request.stateRoot = stateRoot;
+            verifiedProofs[stateRoot] = true;
+            
+            emit ProofVerified(proofRequestId, true, stateRoot);
         } else {
             request.isValid = false;
             emit ProofVerified(proofRequestId, false, bytes32(0));
@@ -315,22 +293,37 @@ contract ZKProofAggregator is VRFConsumerBaseV2Plus, FunctionsClient, Automation
     }
 
     /**
-     * @dev Simple JSON parser for boolean values
+     * @dev Simple JSON parser for boolean values (handles both quoted and unquoted format)
      */
     function _parseJsonBool(string memory json, string memory key) internal pure returns (bool) {
         bytes memory jsonBytes = bytes(json);
-        bytes memory keyBytes = bytes(string(abi.encodePacked('"', key, '":true')));
         
-        for (uint i = 0; i <= jsonBytes.length - keyBytes.length; i++) {
+        // Try compact format first: "s":true
+        bytes memory compactKeyBytes = bytes(string(abi.encodePacked('"', key, '":true')));
+        for (uint i = 0; i <= jsonBytes.length - compactKeyBytes.length; i++) {
             bool isMatch = true;
-            for (uint j = 0; j < keyBytes.length; j++) {
-                if (jsonBytes[i + j] != keyBytes[j]) {
+            for (uint j = 0; j < compactKeyBytes.length; j++) {
+                if (jsonBytes[i + j] != compactKeyBytes[j]) {
                     isMatch = false;
                     break;
                 }
             }
             if (isMatch) return true;
         }
+        
+        // Try quoted format: "success":"true"
+        bytes memory quotedKeyBytes = bytes(string(abi.encodePacked('"', key, '":"true"')));
+        for (uint i = 0; i <= jsonBytes.length - quotedKeyBytes.length; i++) {
+            bool isMatch = true;
+            for (uint j = 0; j < quotedKeyBytes.length; j++) {
+                if (jsonBytes[i + j] != quotedKeyBytes[j]) {
+                    isMatch = false;
+                    break;
+                }
+            }
+            if (isMatch) return true;
+        }
+        
         return false;
     }
 
